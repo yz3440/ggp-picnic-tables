@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "mapbox-gl/dist/mapbox-gl.css";
+import "./app.css";
 
 document.documentElement.style.margin = "0";
 document.documentElement.style.padding = "0";

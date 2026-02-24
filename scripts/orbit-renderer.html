@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Orbit Renderer</title>
+    <style>
+      body {
+        margin: 0;
+        background: #000;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+      const params = new URLSearchParams(location.search);
+      const modelUrl = params.get('model');
+      const canvasSize = parseInt(params.get('size') || '1024', 10);
+      const initialRotY =
+        parseFloat(params.get('rotY') || '0') * (Math.PI / 180);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        preserveDrawingBuffer: true,
+      });
+      renderer.setSize(canvasSize, canvasSize);
+      renderer.setPixelRatio(1);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+      scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      scene.add(dirLight);
+
+      const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+      scene.add(fillLight);
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1000);
+
+      let loadedModel = null;
+      let modelGroup = null;
+      let boundingSphere = null;
+
+      function loadModel(url) {
+        return new Promise((resolve, reject) => {
+          const loader = new GLTFLoader();
+          loader.load(
+            url,
+            (gltf) => {
+              const model = gltf.scene;
+
+              const box = new THREE.Box3().setFromObject(model);
+              const center = box.getCenter(new THREE.Vector3());
+              model.position.sub(center);
+
+              modelGroup = new THREE.Group();
+              modelGroup.add(model);
+              if (initialRotY !== 0) {
+                modelGroup.rotateY(initialRotY);
+              }
+
+              const recenteredBox = new THREE.Box3().setFromObject(modelGroup);
+              boundingSphere = recenteredBox.getBoundingSphere(
+                new THREE.Sphere(),
+              );
+              boundingSphere.center.set(0, 0, 0);
+
+              scene.add(modelGroup);
+              loadedModel = model;
+              resolve();
+            },
+            undefined,
+            reject,
+          );
+        });
+      }
+
+      function recomputeBoundingSphere() {
+        const box = new THREE.Box3().setFromObject(modelGroup);
+        const center = box.getCenter(new THREE.Vector3());
+        modelGroup.position.sub(center);
+        const recenteredBox = new THREE.Box3().setFromObject(modelGroup);
+        boundingSphere = recenteredBox.getBoundingSphere(new THREE.Sphere());
+        boundingSphere.center.set(0, 0, 0);
+      }
+
+      function setupCamera() {
+        const r = boundingSphere.radius;
+        const padding = 1.15;
+        const halfSize = r * padding;
+
+        camera.left = -halfSize;
+        camera.right = halfSize;
+        camera.top = halfSize;
+        camera.bottom = -halfSize;
+        camera.near = 0.01;
+        camera.far = r * 10;
+        camera.updateProjectionMatrix();
+      }
+
+      function positionCamera(azimuthRad) {
+        const elevation = Math.PI / 4; // 45 degrees
+        const r = boundingSphere.radius * 3;
+
+        camera.position.set(
+          Math.cos(azimuthRad) * Math.cos(elevation) * r,
+          Math.sin(elevation) * r,
+          Math.sin(azimuthRad) * Math.cos(elevation) * r,
+        );
+        camera.lookAt(boundingSphere.center);
+        camera.updateProjectionMatrix();
+
+        dirLight.position
+          .copy(camera.position)
+          .normalize()
+          .multiplyScalar(r * 2);
+        fillLight.position
+          .set(-camera.position.x, camera.position.y * 0.5, -camera.position.z)
+          .normalize()
+          .multiplyScalar(r * 2);
+      }
+
+      function positionTopDownCamera() {
+        const r = boundingSphere.radius * 2.5;
+        camera.position.set(0, r, 0);
+        camera.lookAt(boundingSphere.center);
+        camera.up.set(0, 0, 1);
+        dirLight.position
+          .set(0.3, 1, 0.3)
+          .normalize()
+          .multiplyScalar(r * 2);
+        fillLight.position
+          .set(-0.2, 1, -0.2)
+          .normalize()
+          .multiplyScalar(r * 2);
+      }
+
+      window.captureOrbit = async function (frameCount) {
+        recomputeBoundingSphere();
+        setupCamera();
+        const frames = [];
+
+        for (let i = 0; i < frameCount; i++) {
+          const azimuth = (i / frameCount) * Math.PI * 2;
+          positionCamera(azimuth);
+          renderer.render(scene, camera);
+          frames.push(renderer.domElement.toDataURL('image/png'));
+        }
+
+        return frames;
+      };
+
+      window.captureTopDown = async function (size, jpegQuality) {
+        modelGroup.rotateY(-Math.PI / 2);
+        recomputeBoundingSphere();
+        const prevSize = {
+          w: renderer.domElement.width,
+          h: renderer.domElement.height,
+        };
+        renderer.setSize(size, size);
+        renderer.setPixelRatio(1);
+        setupCamera();
+        positionTopDownCamera();
+        renderer.render(scene, camera);
+        const dataUrl = renderer.domElement.toDataURL(
+          'image/jpeg',
+          jpegQuality ?? 0.95,
+        );
+        renderer.setSize(prevSize.w, prevSize.h);
+        modelGroup.rotateY(Math.PI / 2);
+        recomputeBoundingSphere();
+        return dataUrl;
+      };
+
+      window.rendererReady = (async () => {
+        if (!modelUrl) {
+          console.error('No model URL provided. Use ?model=<url>');
+          return;
+        }
+        await loadModel(modelUrl);
+        setupCamera();
+        positionCamera(0);
+        renderer.render(scene, camera);
+        window.__modelLoaded = true;
+        console.log('Model loaded and ready');
+      })();
+    </script>
+  </body>
+</html>
