@@ -1,0 +1,98 @@
+{
+  "ggp-picnic-table-01.glb": {
+    "longitude": -122.4832875023048,
+    "latitude": 37.7694433533307,
+    "altitude": 3.76,
+    "rotation": [0, -61.3, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": -180
+  },
+  "ggp-picnic-table-02.glb": {
+    "longitude": -122.48339934713357,
+    "latitude": 37.76941035338723,
+    "altitude": 3.33,
+    "rotation": [0, -56.3, 90],
+    "scale": [1.23, 1.23, 1.23],
+    "render_rotation": 90
+  },
+  "ggp-picnic-table-06.glb": {
+    "longitude": -122.48357009698539,
+    "latitude": 37.769308373961536,
+    "altitude": 2.21,
+    "rotation": [0, -140.4, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-07.glb": {
+    "longitude": -122.48387717220825,
+    "latitude": 37.7691240002068,
+    "altitude": 1.26,
+    "rotation": [0, -76.1, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": 0
+  },
+  "ggp-picnic-table-08.glb": {
+    "longitude": -122.48389444581314,
+    "latitude": 37.76918160625574,
+    "altitude": 1.27,
+    "rotation": [0, 163.9, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-09.glb": {
+    "longitude": -122.48395974108624,
+    "latitude": 37.76913591376156,
+    "altitude": 1.01,
+    "rotation": [0, -79.8, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": 90
+  },
+  "ggp-picnic-table-10.glb": {
+    "longitude": -122.48445636919035,
+    "latitude": 37.7690878093436,
+    "altitude": 0,
+    "rotation": [0, -137.9, 90],
+    "scale": [1.11, 1.11, 1.11],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-11.glb": {
+    "longitude": -122.48482700223411,
+    "latitude": 37.76897592343126,
+    "altitude": -1.06,
+    "rotation": [0, 0, 90],
+    "scale": [1, 1, 1],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-12.glb": {
+    "longitude": -122.48455953116013,
+    "latitude": 37.76914837600063,
+    "altitude": 0,
+    "rotation": [0, -71.1, 90],
+    "scale": [1.07, 1.07, 1.07],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-15-16.glb": {
+    "longitude": -122.48524289104466,
+    "latitude": 37.76899969456719,
+    "altitude": -1.89,
+    "rotation": [0, 17.9, 90],
+    "scale": [0.87, 0.87, 0.87],
+    "render_rotation": 0
+  },
+  "ggp-picnic-table-19.glb": {
+    "longitude": -122.48502564911948,
+    "latitude": 37.76947326825925,
+    "altitude": -1.22,
+    "rotation": [0, 104.5, 90],
+    "scale": [0.9, 0.9, 0.9],
+    "render_rotation": 180
+  },
+  "ggp-picnic-table-20.glb": {
+    "longitude": -122.48498955211258,
+    "latitude": 37.76947944994426,
+    "altitude": -1.15,
+    "rotation": [0, 103.3, 90],
+    "scale": [0.9, 0.9, 0.9],
+    "render_rotation": 0
+  }
+}

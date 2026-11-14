@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/* The SD-card label's palette: the sticker sheet's warm gray paper, ink, and
+   the green of the tiled tables (small-batch-dataset/stickers). Written as hex
+   so the 3D scene can read them too. The only color besides the pictures is
+   --accent: the Small Batch ticker and the lit map tag. */
+:root {
+  color-scheme: light;
+  --background: #e8e6e1;
+  --foreground: #1c1c1c;
+  --muted: #dedbd4;
+  --muted-foreground: #625f59;
+  /* Three line weights: --border divides regions, --control outlines anything
+     you can click (3:1 against the background), --ring is focus. */
+  --border: #c8c4bb;
+  --control: #85817a;
+  --ring: #333333;
+  --primary: #1c1c1c;
+  --primary-foreground: #e8e6e1;
+  --selected: rgb(28 28 28 / 0.1);
+  --accent: #2f5d50;
+  --accent-foreground: #e8e6e1;
+  /* Behind the renders and the 3D view: the renders' own black. */
+  --plate: #000000;
+
+  --split: 55.5%;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@theme inline {
+  --font-sans: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-control: var(--control);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-selected: var(--selected);
+  --color-plate: var(--plate);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --animate-card-enter: card-enter 500ms ease-out both;
+}
+
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+  }
+}
+
+/* The viewer grows from the clicked card's picture to the whole viewport. */
+.viewer-box {
+  transition:
+    left 450ms var(--ease),
+    top 450ms var(--ease),
+    width 450ms var(--ease),
+    height 450ms var(--ease);
+}
+
+/* The map pane. Opening: the divider slides right, then the top edge drops
+   until it is the minimap. Closing runs the other way round. */
+.map-pane {
+  left: var(--split);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  transition:
+    top 300ms var(--ease),
+    bottom 300ms var(--ease),
+    left 300ms var(--ease) 250ms,
+    right 300ms var(--ease) 250ms;
+}
+
+.map-pane[data-mini] {
+  left: calc(100% - 332px);
+  right: 12px;
+  top: calc(100% - 36px - 240px);
+  bottom: 36px;
+  transition:
+    left 300ms var(--ease) 150ms,
+    right 300ms var(--ease) 150ms,
+    top 300ms var(--ease) 450ms,
+    bottom 300ms var(--ease) 450ms;
+}
+
+@media (max-width: 1023px) {
+  .map-pane {
+    left: 0;
+  }
+  .map-pane[data-mobile-hidden] {
+    display: none;
+  }
+  .map-pane[data-mini] {
+    left: calc(100% - 168px);
+    right: 8px;
+    top: calc(100% - 32px - 150px);
+    bottom: 32px;
+  }
+}
+
+/* The Small Batch ticker: two identical runs, the strip slides by one. */
+.ticker-run {
+  animation: ticker 90s linear infinite;
+}
+.ticker:hover .ticker-run,
+.ticker:focus-visible .ticker-run {
+  animation-play-state: paused;
+}
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-run {
+    animation: none;
+  }
+  .viewer-box,
+  .map-pane,
+  .map-pane[data-mini] {
+    transition: none;
+  }
+}

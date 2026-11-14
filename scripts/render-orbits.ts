@@ -2,6 +2,8 @@ import puppeteer from 'puppeteer';
 import { join } from 'path';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { execSync, execFileSync } from 'child_process';
+import { readTables } from './tables';
+import type { PicnicTable } from '../website/src/types';
 
 const PROJECT_ROOT = join(import.meta.dir, '..');
 const RENDERS_DIR = join(PROJECT_ROOT, 'renders');
@@ -12,26 +14,6 @@ const FRAME_COUNT = 120;
 const FPS = 30;
 const CANVAS_SIZE = 1024;
 const SCREENSHOT_SIZE = 4096;
-
-const INITIAL_ROTATION: Record<string, number> = {
-  'GG Table 1': -180,
-  'GG Table 2': 90,
-  'GG Table 6': 180,
-  'GG Table 8': 180,
-  'GG Table 9': 90,
-  'GG Table 10': 180,
-  'GG Table 11': 180,
-  'GG Table 12': 180,
-  'GG Table 15&16': 0,
-  'GG Table 19': 180,
-  'GG Table 20': 0,
-};
-
-interface TableEntry {
-  id: number;
-  name: string;
-  model_file: string;
-}
 
 async function verifyFfmpeg() {
   try {
@@ -69,16 +51,16 @@ function encodeFramesToMp4(framesDir: string, outputPath: string) {
 
 async function renderModel(
   page: puppeteer.Page,
-  table: TableEntry,
+  table: PicnicTable,
   serverPort: number,
 ) {
   const modelParam = encodeURIComponent(
-    `http://localhost:${serverPort}/model/${table.model_file.replace('model/', '')}`,
+    `http://localhost:${serverPort}/model/${table.file}`,
   );
-  const rotY = INITIAL_ROTATION[table.name] ?? 0;
+  const rotY = table.render_rotation;
   const url = `file://${RENDERER_PATH}?model=${modelParam}&size=${CANVAS_SIZE}&rotY=${rotY}`;
 
-  console.log(`  Loading model: ${table.name}`);
+  console.log(`  Loading model: ${table.file}`);
   await page.goto(url, { waitUntil: 'networkidle0', timeout: 60_000 });
 
   await page.waitForFunction('window.__modelLoaded === true', {
@@ -95,11 +77,11 @@ async function renderModel(
     return (window as any).captureTopDown(size, 0.95);
   }, SCREENSHOT_SIZE);
   const jpegBase64 = topDownDataUrl.replace(/^data:image\/jpeg;base64,/, '');
-  const jpegPath = join(RENDERS_DIR, `${table.name}.jpg`);
+  const jpegPath = join(RENDERS_DIR, `${table.slug}.jpg`);
   writeFileSync(jpegPath, Buffer.from(jpegBase64, 'base64'));
   console.log(`  Saved: ${jpegPath}`);
 
-  const tableFramesDir = join(TMP_DIR, table.name);
+  const tableFramesDir = join(TMP_DIR, table.slug);
   mkdirSync(tableFramesDir, { recursive: true });
 
   for (let i = 0; i < frames.length; i++) {
@@ -112,7 +94,7 @@ async function renderModel(
     writeFileSync(framePath, buffer);
   }
 
-  const outputPath = join(RENDERS_DIR, `${table.name}.mp4`);
+  const outputPath = join(RENDERS_DIR, `${table.slug}.mp4`);
   console.log(`  Encoding to MP4...`);
   encodeFramesToMp4(tableFramesDir, outputPath);
 
@@ -123,9 +105,7 @@ async function renderModel(
 async function main() {
   await verifyFfmpeg();
 
-  const tablesJson: TableEntry[] = await Bun.file(
-    join(PROJECT_ROOT, 'picnic_tables.json'),
-  ).json();
+  const tablesJson = readTables();
   console.log(`Found ${tablesJson.length} tables to render\n`);
 
   mkdirSync(RENDERS_DIR, { recursive: true });
@@ -171,11 +151,11 @@ async function main() {
 
   for (let i = 0; i < tablesJson.length; i++) {
     const table = tablesJson[i];
-    console.log(`[${i + 1}/${tablesJson.length}] ${table.name}`);
+    console.log(`[${i + 1}/${tablesJson.length}] ${table.slug}`);
     try {
       await renderModel(page, table, serverPort);
     } catch (err) {
-      console.error(`  ERROR rendering ${table.name}:`, err);
+      console.error(`  ERROR rendering ${table.slug}:`, err);
     }
   }
 
