@@ -1,0 +1,13 @@
+{
+  "bounds": {
+    "west": -122.48819754771863,
+    "south": 37.767358963316276,
+    "east": -122.48033284563084,
+    "north": 37.77109641005924
+  },
+  "cols": 692,
+  "rows": 416,
+  "base": 6,
+  "offset": -32.941,
+  "credit": "Elevation: USGS 3DEP lidar · Imagery: USDA NAIP via USGS The National Map"
+}

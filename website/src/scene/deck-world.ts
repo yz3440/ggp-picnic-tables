@@ -1,8 +1,10 @@
 import {
   AmbientLight,
   BitmapLayer,
+  COORDINATE_SYSTEM,
   LightingEffect,
   ScenegraphLayer,
+  SimpleMeshLayer,
   Tile3DLayer,
   TileLayer,
   WebMercatorViewport,
@@ -454,4 +456,112 @@ export const altitudeOf = (ground: number) => Math.round((ground - GROUND) * 100
 export function hexToRgba(hex: string): [number, number, number, number] {
   const m = hex.trim().match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
   return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), 255] : [0, 0, 0, 255];
+}
+
+// ---- the baked ground (scripts/build-ground.ts)
+
+export const TERRAIN_ID = "ground-terrain";
+
+interface GroundMeta {
+  bounds: { west: number; south: number; east: number; north: number };
+  cols: number;
+  rows: number;
+  /** height = base + value / 100 (meters above the ellipsoid, as the scene's). */
+  base: number;
+  credit: string;
+}
+
+/**
+ * The ground under the tables without Google: USGS lidar heights with an
+ * aerial photo over them, baked by scripts/build-ground.ts into
+ * model/ground/. One mesh, a vertex per meter, in meters around its center.
+ */
+export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: SimpleMeshLayer; credit: string }> {
+  const [meta, bin] = await Promise.all([
+    fetch("/model/ground/ground.json").then((r) => r.json() as Promise<GroundMeta>),
+    fetch("/model/ground/ground.bin").then((r) => r.arrayBuffer()),
+  ]);
+  const cm = new Uint16Array(bin);
+  const { west, south, east, north } = meta.bounds;
+  const { cols, rows } = meta;
+  const lon0 = (west + east) / 2;
+  const lat0 = (south + north) / 2;
+  const mPerLat = 111_320;
+  const mPerLon = mPerLat * Math.cos(lat0 * D2R);
+  const dx = ((east - west) / cols) * mPerLon;
+  const dy = ((north - south) / rows) * mPerLat;
+  const height = (c: number, r: number) =>
+    meta.base + cm[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))] / 100;
+
+  // Each scan brings its own concrete pad. The lidar ground is within a few
+  // decimeters of it but sometimes above, and would cover it: press the ground
+  // under each pad just below it, easing back to the lidar over a few meters.
+  const pads = tables.filter(isPlaced).map((t) => ({
+    x: (t.longitude! - lon0) * mPerLon,
+    y: (t.latitude! - lat0) * mPerLat,
+    z: tableGround(t) - 0.04,
+    inner: tableRadius(t) + 0.5,
+    outer: tableRadius(t) + 3,
+  }));
+  const settle = (x: number, y: number, z: number) => {
+    for (const p of pads) {
+      const d = Math.hypot(x - p.x, y - p.y);
+      if (d >= p.outer || z <= p.z) continue;
+      const k = d <= p.inner ? 1 : 1 - (d - p.inner) / (p.outer - p.inner);
+      z = z - (z - p.z) * k * k * (3 - 2 * k);
+    }
+    return z;
+  };
+
+  const n = cols * rows;
+  const positions = new Float32Array(n * 3);
+  const normals = new Float32Array(n * 3);
+  const texCoords = new Float32Array(n * 2);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      // Sample centers; row 0 is the north edge.
+      positions[i * 3] = (west + ((c + 0.5) / cols) * (east - west) - lon0) * mPerLon;
+      positions[i * 3 + 1] = (north - ((r + 0.5) / rows) * (north - south) - lat0) * mPerLat;
+      positions[i * 3 + 2] = settle(positions[i * 3], positions[i * 3 + 1], height(c, r));
+      const gx = (height(c + 1, r) - height(c - 1, r)) / (2 * dx);
+      const gy = (height(c, r - 1) - height(c, r + 1)) / (2 * dy);
+      const len = Math.hypot(gx, gy, 1);
+      normals[i * 3] = -gx / len;
+      normals[i * 3 + 1] = -gy / len;
+      normals[i * 3 + 2] = 1 / len;
+      texCoords[i * 2] = (c + 0.5) / cols;
+      texCoords[i * 2 + 1] = (r + 0.5) / rows;
+    }
+  }
+  const indices = new Uint32Array((cols - 1) * (rows - 1) * 6);
+  let k = 0;
+  for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < cols - 1; c++) {
+      const i = r * cols + c;
+      indices.set([i, i + cols, i + 1, i + 1, i + cols, i + cols + 1], k);
+      k += 6;
+    }
+  }
+
+  const layer = new SimpleMeshLayer({
+    id: TERRAIN_ID,
+    data: [0],
+    mesh: {
+      attributes: {
+        positions: { value: positions, size: 3 },
+        normals: { value: normals, size: 3 },
+        texCoords: { value: texCoords, size: 2 },
+      },
+      indices: { value: indices, size: 1 },
+    },
+    texture: "/model/ground/ground.jpg",
+    coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
+    coordinateOrigin: [lon0, lat0, 0],
+    getPosition: () => [0, 0, 0],
+    getColor: [255, 255, 255],
+    // The photo carries its own light, as the tiles and scans do: show it as it is.
+    material: { ambient: 1, diffuse: 0, shininess: 0, specularColor: [0, 0, 0] },
+  });
+  return { layer, credit: meta.credit };
 }

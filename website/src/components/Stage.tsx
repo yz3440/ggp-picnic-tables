@@ -74,7 +74,7 @@ export default function Stage({
   const [shown, setShown] = useState<PicnicTable | null>(open);
   const [autoRotate, setAutoRotate] = useState(false);
   const [preset, setPreset] = useState<ViewPreset>("top");
-  const [ground, setGround] = useState<Ground>("satellite");
+  const [ground, setGround] = useState<Ground>("terrain");
   /** The open table whose model has loaded, and the table whose render stays
    *  up until then (opening from the grid). */
   const [readyId, setReadyId] = useState<number | null>(null);
@@ -87,6 +87,7 @@ export default function Stage({
   const [attribution, setAttribution] = useState("");
   const [mapAttribution, setMapAttribution] = useState("");
   const [satelliteAttribution, setSatelliteAttribution] = useState("");
+  const [terrainCredit, setTerrainCredit] = useState("");
 
   // One scene for the life of the page.
   useEffect(() => {
@@ -101,6 +102,7 @@ export default function Stage({
     scene.onAttributions = setAttribution;
     scene.onMapAttributions = setMapAttribution;
     scene.onSatelliteAttributions = setSatelliteAttribution;
+    scene.onTerrainCredit = setTerrainCredit;
     scene.onZoomOut = () => closeRef.current();
     scene.onZoomWarning = setZoomWarning;
     scene.onModelReady = setReadyId;
@@ -224,6 +226,7 @@ export default function Stage({
     <div className="flex" role="group" aria-label="Ground">
       {(
         [
+          ["terrain", "terrain"],
           ["satellite", "satellite"],
           ["3d", "3d"],
         ] as const
@@ -233,7 +236,13 @@ export default function Stage({
           type="button"
           onClick={() => chooseGround(id)}
           aria-pressed={ground === id}
-          title={id === "3d" ? "Google’s photorealistic 3D tiles" : "Google’s satellite imagery"}
+          title={
+            id === "3d"
+              ? "Google’s photorealistic 3D tiles"
+              : id === "satellite"
+                ? "Google’s satellite imagery"
+                : "USGS lidar ground with an aerial photo"
+          }
           className={button(ground === id ? "secondary" : "outline", "xs", i > 0 ? "-ml-px" : "")}
         >
           {label}
@@ -365,9 +374,11 @@ export default function Stage({
             <span className="absolute top-1/2 left-1/2 size-2 -translate-1/2 border border-accent" />
             <span className="absolute top-0 left-0 bg-background px-1 text-[10px] leading-4 text-muted-foreground">×4</span>
           </div>
-          {(ground === "3d" ? attribution : satelliteAttribution) && (
+          {(ground === "terrain" ? terrainCredit : ground === "3d" ? attribution : satelliteAttribution) && (
             <p className="pointer-events-none absolute bottom-1 left-2 max-w-[calc(100%-188px)] truncate bg-background/80 px-1 text-[10px] text-muted-foreground lg:max-w-[calc(100%-360px)]">
-              Google · {ground === "3d" ? `${attribution} · ${PARK_CREDIT}` : satelliteAttribution}
+              {ground === "terrain"
+                ? terrainCredit
+                : `Google · ${ground === "3d" ? `${attribution} · ${PARK_CREDIT}` : satelliteAttribution}`}
             </p>
           )}
         </div>

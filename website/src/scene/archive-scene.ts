@@ -6,6 +6,8 @@ import {
   GROUND,
   GROUND_MAP_ID,
   basemapLayer,
+  loadTerrain,
+  TERRAIN_ID,
   createMapSession,
   flatLight,
   hexToRgba,
@@ -33,8 +35,9 @@ import { glowLayer, glowSize, glowStrength } from "./glow";
 import { SeeThroughExtension, type SeeThrough } from "./see-through";
 
 export type ViewPreset = "orbit" | "top" | "side";
-/** What the open table stands on: Google's satellite imagery, or its 3D tiles. */
-export type Ground = "satellite" | "3d";
+/** What the open table stands on: the baked lidar ground with an aerial photo
+ *  (no Google), Google's satellite imagery laid flat, or Google's 3D tiles. */
+export type Ground = "terrain" | "satellite" | "3d";
 type ViewId = "viewer" | "map";
 
 interface Box {
@@ -127,8 +130,11 @@ export class ArchiveScene {
   private scans: Layer[] = [];
   private basemap: Layer | null = null;
   private groundMap: Layer | null = null;
-  /** Satellite by default; the 3D tiles are the alternative. */
-  private ground: Ground = "satellite";
+  /** The baked terrain by default; satellite and the 3D tiles are the alternatives. */
+  private ground: Ground = "terrain";
+  /** The baked ground, once loaded (model/ground/, scripts/build-ground.ts). */
+  private terrain: Layer | null = null;
+  private terrainLoading: Promise<void> | null = null;
   /** The satellite session, once made: the viewer's imagery is requested with it. */
   private satellite: string | null = null;
   private mapDark: boolean | null = null;
@@ -181,6 +187,8 @@ export class ArchiveScene {
   onPickTable: ((id: number) => void) | null = null;
   /** The open table's model has loaded. */
   onModelReady: ((id: number) => void) | null = null;
+  /** The baked ground's credits, once it has loaded. */
+  onTerrainCredit: ((text: string) => void) | null = null;
   /** The loupe appeared or went away. */
   onLoupe: ((on: boolean) => void) | null = null;
 
@@ -212,10 +220,11 @@ export class ArchiveScene {
       views: [],
       viewState: this.deckViewState(),
       layers: [],
-      // The map shows only the roadmap and the loupe only the scans; everything else is the viewer's.
+      // The map shows only the roadmap; the loupe the scans, and the baked
+      // ground (one small mesh, unlike the streamed tiles); everything else is the viewer's.
       layerFilter: ({ layer, viewport }) =>
         viewport.id === "loupe"
-          ? tableIdOfLayer(layer.id) != null
+          ? tableIdOfLayer(layer.id) != null || layer.id === TERRAIN_ID
           : (viewport.id === "map") === layer.id.startsWith(BASEMAP_ID),
       onHover: (info) => this.setPointer(info.viewport?.id === "viewer" && info.x >= 0 ? { x: info.x, y: info.y } : null),
       // No loupe while the camera is being turned.
@@ -305,6 +314,7 @@ export class ArchiveScene {
     this.ground = ground;
     this.updateGroundMap();
     this.ensureSatellite();
+    this.ensureTerrain();
     this.updateLayers();
     this.deck.setProps({ views: this.buildViews() });
   }
@@ -361,6 +371,7 @@ export class ArchiveScene {
     }
     this.fly("map", mapFocus(t), 900);
     this.ensureSatellite();
+    this.ensureTerrain();
     this.updateGroundMap();
     this.updateLayers();
   }
@@ -400,7 +411,8 @@ export class ArchiveScene {
         ...(this.basemap ? [this.basemap] : []),
         ...hide(this.tiles, on3d),
         ...hide(this.floors, on3d),
-        ...(!on3d && this.groundMap ? [this.groundMap] : []),
+        ...hide(this.terrain, this.ground === "terrain"),
+        ...(this.ground === "satellite" && this.groundMap ? [this.groundMap] : []),
         // The glow before the scans: a halo behind each table, which the scan
         // covers wherever it can be seen, and which shows through trees where
         // it cannot.
@@ -425,6 +437,22 @@ export class ArchiveScene {
     this.glowKey = key;
     this.glow = glowLayer(this.tables, level, size);
     this.updateLayers();
+  }
+
+  /** Load the baked ground the first time it is wanted. */
+  private ensureTerrain() {
+    if (this.ground !== "terrain" || this.terrainLoading) return;
+    this.terrainLoading = loadTerrain(this.tables)
+      .then(({ layer, credit }) => {
+        if (this.disposed) return;
+        this.terrain = layer;
+        this.onTerrainCredit?.(credit);
+        this.updateLayers();
+      })
+      .catch((e) => {
+        console.error(e);
+        this.terrainLoading = null;
+      });
   }
 
   /** Make the satellite session the first time the imagery is wanted. */

@@ -16,7 +16,8 @@
     "make-previews": "tsx scripts/make-previews.ts",
     "sd-card": "tsx small-batch-dataset/build-sd-card.ts",
     "flash-sd": "tsx small-batch-dataset/flash-sd.ts",
-    "stickers": "tsx small-batch-dataset/stickers/build.ts"
+    "stickers": "tsx small-batch-dataset/stickers/build.ts",
+    "ground": "tsx scripts/build-ground.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
@@ -45,6 +46,7 @@
     "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.24",
     "concurrently": "^9.2.1",
+    "geotiff": "^3.0.5",
     "postcss": "^8.5.6",
     "puppeteer": "^24.37.5",
     "tailwindcss": "^4.2.1",
