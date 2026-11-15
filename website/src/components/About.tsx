@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { inSeason, MARKET } from '../lib/market';
 import turrell from '../assets/turrell-three-gems.webp';
+import cards from '../assets/sd-cards.webp';
 import { MICRO } from './ui';
 
 // three.js only loads when someone opens About.
@@ -10,6 +11,7 @@ const SHOW = 'https://www.tiat.place/exhibitions/computer-love';
 
 /** What is on the card, as its readme.txt lists it. */
 const CONTENTS = [
+  ['card', '8 gb sd'],
   ['files', '12 × .glb, meters, +y up'],
   [
     'readme.txt',
@@ -36,15 +38,13 @@ export default function About() {
             computer love
           </a>{' '}
           at tiat. that morning i walked into golden gate park, came across
-          these picnic tables in hellman hollow, and scanned every one i could
-          see.
+          these picnic tables in hellman hollow, and scanned every one i saw.
         </p>
         <p>
-          later, when i went to match each scan to its spot on google earth, i
-          was surprised. google earth and the map show more tables than i found
-          in the park; some of them just weren’t there. i don’t know what
-          happened to them. it’s why the numbers skip: 1, 2, 6 through 12, 15 &
-          16, 19, 20.
+          later, i matched each scan to its coordinates with google earth. i was
+          surprised that google earth showed more tables than i found in the
+          park. some of them just weren’t there when i visited, which is why you
+          see the jumps in table numbers in my scans.
         </p>
         <p>
           after the scans, i walked over to the de young and saw the james
@@ -75,9 +75,8 @@ export default function About() {
         </div>
         <div className='flex min-w-0 flex-col gap-3 text-[13px] leading-5.25'>
           <p>
-            all twelve scans on one sd card, labeled with a sticker tiled from
-            the tables themselves. i made 30 of them for the market. drag the
-            card to turn it.
+            all 12 scans on one 8 gb sd card, labeled with a custom sticker. i
+            made 30 of them for the market.
           </p>
           <dl className='grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px] leading-4'>
             {CONTENTS.map(([k, v]) => (
@@ -103,7 +102,24 @@ export default function About() {
         </div>
       </div>
 
-      <p className='mt-3 text-[11px] text-muted-foreground'>by yufeng zhao.</p>
+      <figure className='flex max-w-xl flex-col gap-2'>
+        <img
+          src={cards}
+          alt='The finished SD cards, each with its tiled sticker, in a clear plastic bin among their empty cases.'
+          width={1200}
+          height={900}
+          loading='lazy'
+          className='aspect-4/3 w-full bg-muted object-cover'
+        />
+        <figcaption className='text-[11px] text-muted-foreground'>
+          the edition, labeled and out of their cases.
+        </figcaption>
+      </figure>
+
+      <p className='mt-3 text-[11px] text-muted-foreground'>
+        by yufeng zhao. special thanks to my dad, for smuggling the sd cards
+        over from china.
+      </p>
     </article>
   );
 }
