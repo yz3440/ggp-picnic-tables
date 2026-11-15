@@ -127,7 +127,8 @@ export class ArchiveScene {
   private scans: Layer[] = [];
   private basemap: Layer | null = null;
   private groundMap: Layer | null = null;
-  private ground: Ground = "3d";
+  /** Satellite by default; the 3D tiles are the alternative. */
+  private ground: Ground = "satellite";
   /** The satellite session, once made: the viewer's imagery is requested with it. */
   private satellite: string | null = null;
   private mapDark: boolean | null = null;

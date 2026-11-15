@@ -7,7 +7,7 @@
     "dev": "concurrently -n api,vite -c blue,green \"bun run website/server/index.ts\" \"vite website\"",
     "dev:server": "bun run website/server/index.ts",
     "dev:client": "vite website",
-    "build": "vite build website && cp -r model website/dist/model && cp -r renders website/dist/renders",
+    "build": "vite build website && cp -r model dist/model && cp -r renders dist/renders",
     "preview": "vite preview website",
     "render-orbits": "bun run scripts/render-orbits.ts",
     "make-previews": "bun run scripts/make-previews.ts"

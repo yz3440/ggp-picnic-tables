@@ -74,7 +74,7 @@ export default function Stage({
   const [shown, setShown] = useState<PicnicTable | null>(open);
   const [autoRotate, setAutoRotate] = useState(false);
   const [preset, setPreset] = useState<ViewPreset>("top");
-  const [ground, setGround] = useState<Ground>("3d");
+  const [ground, setGround] = useState<Ground>("satellite");
   /** The open table whose model has loaded, and the table whose render stays
    *  up until then (opening from the grid). */
   const [readyId, setReadyId] = useState<number | null>(null);
@@ -224,8 +224,8 @@ export default function Stage({
     <div className="flex" role="group" aria-label="Ground">
       {(
         [
-          ["3d", "3d"],
           ["satellite", "satellite"],
+          ["3d", "3d"],
         ] as const
       ).map(([id, label], i) => (
         <button
