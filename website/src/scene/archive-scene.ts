@@ -129,8 +129,8 @@ export class ArchiveScene {
   private scans: Layer[] = [];
   private basemap: Layer | null = null;
   private groundMap: Layer | null = null;
-  /** The lidar terrain by default; satellite and the 3D tiles are the alternatives. */
-  private ground: Ground = "terrain";
+  /** Satellite by default; the terrain and Google's 3D tiles are the alternatives. */
+  private ground: Ground = "satellite";
   /** The ground's layers, once loaded (scene/ground.ts, fetched live). */
   private terrain: Layer[] = [];
   private terrainLoading: Promise<void> | null = null;
@@ -223,7 +223,7 @@ export class ArchiveScene {
       // ground near them (one mesh, unlike the streamed tiles); everything else is the viewer's.
       layerFilter: ({ layer, viewport }) =>
         viewport.id === "loupe"
-          ? tableIdOfLayer(layer.id) != null || layer.id === TERRAIN_ID
+          ? tableIdOfLayer(layer.id) != null || layer.id.startsWith(TERRAIN_ID)
           : (viewport.id === "map") === layer.id.startsWith(BASEMAP_ID),
       onHover: (info) => this.setPointer(info.viewport?.id === "viewer" && info.x >= 0 ? { x: info.x, y: info.y } : null),
       // No loupe while the camera is being turned.
@@ -257,22 +257,7 @@ export class ArchiveScene {
         if (id != null && id !== this.openId) this.onPickTable?.(id);
       },
     });
-    // Cut Google's model of each table from under its scan, dim the tiles and
-    // light up the park.
-    const boxes = carveBoxes(this.tables);
-    this.seeThrough.boxes = boxes;
-    const carve = {
-      extensions: [new CarveExtension(), new ParkLightExtension(), new SeeThroughExtension()],
-      carveBoxes: boxes,
-      // Trees and roofs between the camera and each table turn see-through.
-      seeThrough: this.seeThrough,
-    };
-    if (apiKey) {
-      // Detail only around the tables; the rest of the city as coarse as it can be.
-      const around = this.tables.map((t) => [t.longitude!, t.latitude!, tableZ(t)]);
-      this.tiles = tilesLayer(apiKey, (text) => this.onAttributions?.(text), false, carve, around);
-      this.floors = carveFloorLayer(boxes);
-    }
+    this.seeThrough.boxes = carveBoxes(this.tables);
     this.scans = tableLayers(this.tables, true);
     this.updateLayers();
     // No view is placed yet: let the page under the canvas take every event.
@@ -314,6 +299,7 @@ export class ArchiveScene {
     this.updateGroundMap();
     this.ensureSatellite();
     this.ensureTerrain();
+    this.ensureTiles();
     this.updateLayers();
     this.deck.setProps({ views: this.buildViews() });
   }
@@ -371,6 +357,7 @@ export class ArchiveScene {
     this.fly("map", mapFocus(t), 900);
     this.ensureSatellite();
     this.ensureTerrain();
+    this.ensureTiles();
     this.updateGroundMap();
     this.updateLayers();
   }
@@ -410,7 +397,9 @@ export class ArchiveScene {
         ...(this.basemap ? [this.basemap] : []),
         ...hide(this.tiles, on3d),
         ...hide(this.floors, on3d),
-        ...this.terrain.flatMap((layer) => hide(layer, this.ground === "terrain")),
+        // Removed, not hidden, under the other grounds, so its imagery stops
+        // loading. (Fresh instances each time: deck.gl cannot reuse a finalized one.)
+        ...(this.ground === "terrain" ? this.terrain.map((layer) => layer.clone({})) : []),
         ...(this.ground === "satellite" && this.groundMap ? [this.groundMap] : []),
         // The glow before the scans: a halo behind each table, which the scan
         // covers wherever it can be seen, and which shows through trees where
@@ -438,7 +427,31 @@ export class ArchiveScene {
     this.updateLayers();
   }
 
-  /** Load the baked ground the first time it is wanted. */
+  /**
+   * Make Google's 3D tiles the first time they are wanted. Made then, and not
+   * hidden from the start: a Tile3DLayer picks its tiles only for views it is
+   * drawn in, so one made hidden never picks any and stays black when shown.
+   * (And visitors who never choose 3D never start a 3D tiles session.)
+   */
+  private ensureTiles() {
+    const apiKey = this.apiKey;
+    if (!apiKey || this.ground !== "3d" || this.tiles) return;
+    // Cut Google's model of each table from under its scan, dim the tiles and
+    // light up the park.
+    const boxes = this.seeThrough.boxes;
+    const carve = {
+      extensions: [new CarveExtension(), new ParkLightExtension(), new SeeThroughExtension()],
+      carveBoxes: boxes,
+      // Trees and roofs between the camera and each table turn see-through.
+      seeThrough: this.seeThrough,
+    };
+    // Detail only around the tables; the rest of the city as coarse as it can be.
+    const around = this.tables.map((t) => [t.longitude!, t.latitude!, tableZ(t)]);
+    this.tiles = tilesLayer(apiKey, (text) => this.onAttributions?.(text), false, carve, around);
+    this.floors = carveFloorLayer(boxes);
+  }
+
+  /** Load the ground the first time it is wanted. */
   private ensureTerrain() {
     if (this.ground !== "terrain" || this.terrainLoading) return;
     this.terrainLoading = loadGround(this.tables)
@@ -478,6 +491,8 @@ export class ArchiveScene {
     this.groundMap = basemapLayer(this.apiKey, this.satellite, "satellite", {
       idPrefix: GROUND_MAP_ID,
       z: tableGround(t) - 0.02,
+      // Lit like the 3D tiles: the park bright, its border warm, the city dim.
+      extensions: [new ParkLightExtension({ lngLat: true })],
     });
   }
 

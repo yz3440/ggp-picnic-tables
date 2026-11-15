@@ -2,6 +2,7 @@ import {
   AmbientLight,
   BitmapLayer,
   LightingEffect,
+  type LayerExtension,
   ScenegraphLayer,
   Tile3DLayer,
   TileLayer,
@@ -213,8 +214,14 @@ const MAX_TILE_ZOOM: Record<MapKind, number> = { light: 20, dark: 20, satellite:
 
 /** One of Google's 2D maps. `z` lifts it to that ellipsoid height (the viewer
  *  lays its imagery at the open table's ground; the flat map pane leaves it at 0). */
-export function basemapLayer(apiKey: string, session: string, kind: MapKind, { idPrefix = BASEMAP_ID, z = 0 } = {}) {
+export function basemapLayer(
+  apiKey: string,
+  session: string,
+  kind: MapKind,
+  { idPrefix = BASEMAP_ID, z = 0, extensions = [] as LayerExtension[] } = {},
+) {
   return new TileLayer({
+    extensions,
     // A new id per kind, so another kind's tiles are not reused.
     id: `${idPrefix}-${kind}`,
     data: `${TILE_API}/v1/2dtiles/{z}/{x}/{y}?session=${encodeURIComponent(session)}&key=${encodeURIComponent(apiKey)}`,

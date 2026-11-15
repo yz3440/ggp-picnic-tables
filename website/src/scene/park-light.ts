@@ -93,8 +93,7 @@ uniform parkLightUniforms {
 
 uniform sampler2D parkLight_mask;
 
-vec3 parkLight_apply(vec3 color, vec2 meters) {
-  vec2 uv = parkLight.uvOrigin + meters * parkLight.uvPerMeter;
+vec3 parkLight_apply(vec3 color, vec2 uv) {
   vec2 m = (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) ? vec2(0.0) : texture(parkLight_mask, uv).rg;
   vec3 lit = color * mix(${OUTSIDE.toFixed(3)}, ${INSIDE.toFixed(3)}, m.r);
   return lit + vec3(${BORDER_COLOR.map((c) => c.toFixed(3)).join(", ")}) * m.g * ${BORDER.toFixed(3)};
@@ -102,23 +101,39 @@ vec3 parkLight_apply(vec3 color, vec2 meters) {
 `,
 };
 
+const deg = (v: number) => v.toFixed(8);
+
 /**
- * Dims Google's 3D tiles and lights up Golden Gate Park, brightest along its
- * border. Put it on the Tile3DLayer; it reaches each tile's ScenegraphLayer,
- * whose points are meter offsets east-north-up from the tile's origin, and
- * maps those onto the park mask with a per-tile offset and scale.
+ * Dims the ground and lights up Golden Gate Park, brightest along its border:
+ * the same light on every kind of ground the viewer shows.
+ *
+ * By default for Google's 3D tiles: put it on the Tile3DLayer; it reaches each
+ * tile's ScenegraphLayer, whose points are meter offsets east-north-up from
+ * the tile's origin, and maps those onto the park mask with a per-tile offset
+ * and scale. With `{ lngLat: true }`, for layers placed in longitude and
+ * latitude (the satellite and terrain imagery's BitmapLayers), which reads
+ * each point's own longitude and latitude instead.
  */
-export class ParkLightExtension extends LayerExtension {
+export class ParkLightExtension extends LayerExtension<{ lngLat?: boolean }> {
   static extensionName = "ParkLightExtension";
 
-  getShaders() {
+  getShaders(this: Layer, extension: this) {
+    // deck.gl leaves opts undefined when the extension is made without any.
+    const lngLat = Boolean(extension.opts?.lngLat);
+    // One value carried to the fragment shader, whichever kind it is: Google's
+    // tiles already use nearly every varying a GPU allows, and one more stops
+    // their shader from linking (they then draw nothing).
+    const position = lngLat ? "geometry.worldPosition.xy" : "geometry.position.xy / project.commonUnitsPerWorldUnit.xy";
+    const uv = lngLat
+      ? `vec2((parkLight_position.x - (${deg(west)})) / ${deg(east - west)}, (${deg(north)} - parkLight_position.y) / ${deg(north - south)})`
+      : "parkLight.uvOrigin + parkLight_position * parkLight.uvPerMeter";
     return {
       modules: [parkLightModule],
       inject: {
-        "vs:#decl": "out vec3 parkLight_position;",
-        "vs:DECKGL_FILTER_GL_POSITION": "parkLight_position = geometry.position.xyz / project.commonUnitsPerWorldUnit;",
-        "fs:#decl": "in vec3 parkLight_position;",
-        "fs:DECKGL_FILTER_COLOR": "color.rgb = parkLight_apply(color.rgb, parkLight_position.xy);",
+        "vs:#decl": "out vec2 parkLight_position;",
+        "vs:DECKGL_FILTER_GL_POSITION": `parkLight_position = ${position};`,
+        "fs:#decl": "in vec2 parkLight_position;",
+        "fs:DECKGL_FILTER_COLOR": `color.rgb = parkLight_apply(color.rgb, ${uv});`,
       },
     };
   }
