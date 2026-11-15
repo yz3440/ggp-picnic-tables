@@ -5,10 +5,12 @@ import {
   LightingEffect,
   ScenegraphLayer,
   SimpleMeshLayer,
+  TerrainLayer,
   Tile3DLayer,
   TileLayer,
   WebMercatorViewport,
   type Deck,
+  type Layer,
   type MapView,
   type MapViewState,
 } from "deck.gl";
@@ -461,6 +463,19 @@ export function hexToRgba(hex: string): [number, number, number, number] {
 // ---- the baked ground (scripts/build-ground.ts)
 
 export const TERRAIN_ID = "ground-terrain";
+const SURROUND_ID = "ground-surround";
+/** The streamed ground sits this far down, so inside the baked area it is
+ *  always under the baked ground (the two agree to about half a meter)... */
+const SURROUND_SINK = 4;
+/** ...and the baked ground's outer edge eases down to meet it over this many meters. */
+const EDGE_RING = 50;
+
+// Around the baked ground, streamed: Terrain Tiles on AWS (Terrarium-encoded
+// heights from USGS 3DEP; within half a meter of every pad here) under the
+// USGS orthoimagery tiles. Public, no key. Both stop at zoom 15–16, so they
+// are soft up close: the baked ground covers the tables.
+const SURROUND_HEIGHTS = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+const SURROUND_IMAGERY = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
 
 interface GroundMeta {
   bounds: { west: number; south: number; east: number; north: number };
@@ -468,6 +483,8 @@ interface GroundMeta {
   rows: number;
   /** height = base + value / 100 (meters above the ellipsoid, as the scene's). */
   base: number;
+  /** Ellipsoid minus sea-level height here: added to the streamed heights too. */
+  offset: number;
   credit: string;
 }
 
@@ -476,7 +493,7 @@ interface GroundMeta {
  * aerial photo over them, baked by scripts/build-ground.ts into
  * model/ground/. One mesh, a vertex per meter, in meters around its center.
  */
-export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: SimpleMeshLayer; credit: string }> {
+export async function loadTerrain(tables: PicnicTable[]): Promise<{ layers: Layer[]; credit: string }> {
   const [meta, bin] = await Promise.all([
     fetch("/model/ground/ground.json").then((r) => r.json() as Promise<GroundMeta>),
     fetch("/model/ground/ground.bin").then((r) => r.arrayBuffer()),
@@ -503,6 +520,15 @@ export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: Simpl
     inner: tableRadius(t) + 0.5,
     outer: tableRadius(t) + 3,
   }));
+  // Ease the outer ring down to the streamed ground around it (SURROUND_SINK).
+  const halfW = ((east - west) / 2) * mPerLon;
+  const halfH = ((north - south) / 2) * mPerLat;
+  const edge = (x: number, y: number, z: number) => {
+    const d = Math.min(halfW - Math.abs(x), halfH - Math.abs(y));
+    if (d >= EDGE_RING) return z;
+    const k = 1 - Math.max(0, d) / EDGE_RING;
+    return z - SURROUND_SINK * k * k * (3 - 2 * k);
+  };
   const settle = (x: number, y: number, z: number) => {
     for (const p of pads) {
       const d = Math.hypot(x - p.x, y - p.y);
@@ -523,7 +549,9 @@ export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: Simpl
       // Sample centers; row 0 is the north edge.
       positions[i * 3] = (west + ((c + 0.5) / cols) * (east - west) - lon0) * mPerLon;
       positions[i * 3 + 1] = (north - ((r + 0.5) / rows) * (north - south) - lat0) * mPerLat;
-      positions[i * 3 + 2] = settle(positions[i * 3], positions[i * 3 + 1], height(c, r));
+      const x = positions[i * 3];
+      const y = positions[i * 3 + 1];
+      positions[i * 3 + 2] = edge(x, y, settle(x, y, height(c, r)));
       const gx = (height(c + 1, r) - height(c - 1, r)) / (2 * dx);
       const gy = (height(c, r - 1) - height(c, r + 1)) / (2 * dy);
       const len = Math.hypot(gx, gy, 1);
@@ -544,7 +572,7 @@ export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: Simpl
     }
   }
 
-  const layer = new SimpleMeshLayer({
+  const baked = new SimpleMeshLayer({
     id: TERRAIN_ID,
     data: [0],
     mesh: {
@@ -561,7 +589,23 @@ export async function loadTerrain(tables: PicnicTable[]): Promise<{ layer: Simpl
     getPosition: () => [0, 0, 0],
     getColor: [255, 255, 255],
     // The photo carries its own light, as the tiles and scans do: show it as it is.
-    material: { ambient: 1, diffuse: 0, shininess: 0, specularColor: [0, 0, 0] },
+    material: UNLIT,
   });
-  return { layer, credit: meta.credit };
+
+  // The streamed ground everywhere else, a little under the baked one.
+  const surround = new TerrainLayer({
+    id: SURROUND_ID,
+    elevationData: SURROUND_HEIGHTS,
+    texture: SURROUND_IMAGERY,
+    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 + meta.offset - SURROUND_SINK },
+    maxZoom: 15,
+    meshMaxError: 1,
+    material: UNLIT,
+  });
+  return {
+    layers: [surround, baked],
+    credit: "Elevation: USGS 3DEP lidar, Terrain Tiles on AWS · Imagery: USDA NAIP via USGS The National Map",
+  };
 }
+
+const UNLIT = { ambient: 1, diffuse: 0, shininess: 0, specularColor: [0, 0, 0] as [number, number, number] };

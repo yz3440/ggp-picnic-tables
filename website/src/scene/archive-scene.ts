@@ -133,7 +133,7 @@ export class ArchiveScene {
   /** The baked terrain by default; satellite and the 3D tiles are the alternatives. */
   private ground: Ground = "terrain";
   /** The baked ground, once loaded (model/ground/, scripts/build-ground.ts). */
-  private terrain: Layer | null = null;
+  private terrain: Layer[] = [];
   private terrainLoading: Promise<void> | null = null;
   /** The satellite session, once made: the viewer's imagery is requested with it. */
   private satellite: string | null = null;
@@ -411,7 +411,7 @@ export class ArchiveScene {
         ...(this.basemap ? [this.basemap] : []),
         ...hide(this.tiles, on3d),
         ...hide(this.floors, on3d),
-        ...hide(this.terrain, this.ground === "terrain"),
+        ...this.terrain.flatMap((layer) => hide(layer, this.ground === "terrain")),
         ...(this.ground === "satellite" && this.groundMap ? [this.groundMap] : []),
         // The glow before the scans: a halo behind each table, which the scan
         // covers wherever it can be seen, and which shows through trees where
@@ -443,9 +443,9 @@ export class ArchiveScene {
   private ensureTerrain() {
     if (this.ground !== "terrain" || this.terrainLoading) return;
     this.terrainLoading = loadTerrain(this.tables)
-      .then(({ layer, credit }) => {
+      .then(({ layers, credit }) => {
         if (this.disposed) return;
-        this.terrain = layer;
+        this.terrain = layers;
         this.onTerrainCredit?.(credit);
         this.updateLayers();
       })
