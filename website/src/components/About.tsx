@@ -19,10 +19,10 @@ const CONTENTS = [
 
 const LINK = "underline decoration-control underline-offset-2 hover:decoration-foreground";
 
-/** About takes the left pane's place; the map stays. */
+/** The About page (/about): one column, the width of the text. */
 export default function About() {
   return (
-    <article className="flex flex-col gap-3 px-4 pt-5 pb-10">
+    <article className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-8 pb-16">
       <h1 className="text-4xl font-bold tracking-tight">about</h1>
 
       <div className="flex max-w-prose flex-col gap-3 text-[13px] leading-5.25">

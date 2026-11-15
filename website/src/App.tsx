@@ -12,10 +12,17 @@ function readHash() {
   return window.location.hash.match(/^#table-(.+)$/)?.[1] ?? null;
 }
 
+/** About is its own page, at /about; everything else is the archive. */
+const ABOUT_PATH = "/about";
+function readSection(): Section {
+  return window.location.pathname.replace(/\/+$/, "") === ABOUT_PATH ? "about" : "archive";
+}
+const TITLE = "Golden Gate Park Picnic Tables";
+
 const placed = (t: PicnicTable) => t.longitude != null && t.latitude != null;
 
 export default function App() {
-  const [section, setSection] = useState<Section>("archive");
+  const [section, setSection] = useState<Section>(readSection);
   const [order, setOrder] = useState<Order>("number");
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>("grid");
@@ -24,16 +31,29 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => setSlug(readHash());
+    // Back and Forward between the archive and About change the path, not the hash.
+    const onPop = () => {
+      setSection(readSection());
+      setSlug(readHash());
+    };
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      window.removeEventListener("popstate", onPop);
+    };
   }, []);
+
+  useEffect(() => {
+    document.title = section === "about" ? `About · ${TITLE}` : TITLE;
+  }, [section]);
 
   const sorted = useMemo(
     () => (order === "number" ? tables : [...tables].sort((a, b) => (b.longitude ?? -180) - (a.longitude ?? -180))),
     [order],
   );
   const onMap = useMemo(() => sorted.filter(placed), [sorted]);
-  const open = onMap.find((t) => tableSlug(t) === slug) ?? null;
+  const open = section === "archive" ? (onMap.find((t) => tableSlug(t) === slug) ?? null) : null;
 
   const openRef = useRef(open);
   openRef.current = open;
@@ -76,7 +96,9 @@ export default function App() {
   }, [close, step]);
 
   const chooseSection = (s: Section) => {
-    close();
+    if (s === section && !openRef.current) return;
+    history.pushState(null, "", s === "about" ? ABOUT_PATH : "/");
+    setSlug(null);
     setSection(s);
   };
 
@@ -84,20 +106,25 @@ export default function App() {
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <GlobalBar section={section} onSection={chooseSection} />
       <SeasonTicker />
-      <Stage
-        tables={onMap}
-        open={open}
-        hoveredId={hoveredId}
-        onHover={setHoveredId}
-        onOpen={openTable}
-        onClose={close}
-        onStep={step}
-        mobileView={mobileView}
-        onMobileView={setMobileView}
-      >
-        {section === "about" ? (
+      {section === "about" && (
+        <main className="min-h-0 flex-1 overflow-y-auto">
           <About />
-        ) : (
+        </main>
+      )}
+      {/* The archive stays mounted under About, hidden, so its map and 3D scene
+          are where they were on the way back. */}
+      <div className={`flex min-h-0 flex-1 flex-col ${section === "about" ? "hidden" : ""}`}>
+        <Stage
+          tables={onMap}
+          open={open}
+          hoveredId={hoveredId}
+          onHover={setHoveredId}
+          onOpen={openTable}
+          onClose={close}
+          onStep={step}
+          mobileView={mobileView}
+          onMobileView={setMobileView}
+        >
           <GridPanel
             tables={sorted}
             order={order}
@@ -108,8 +135,8 @@ export default function App() {
             mobileView={mobileView}
             onMobileView={setMobileView}
           />
-        )}
-      </Stage>
+        </Stage>
+      </div>
     </div>
   );
 }
