@@ -1,46 +1,54 @@
-import { COORDINATE_SYSTEM, SimpleMeshLayer, TerrainLayer, type Layer } from "deck.gl";
+import { BitmapLayer, COORDINATE_SYSTEM, SimpleMeshLayer, TerrainLayer, TileLayer, type Layer } from "deck.gl";
+// Still marked experimental in deck.gl 9.4, hence the underscore.
+import { _TerrainExtension as TerrainExtension } from "@deck.gl/extensions";
 import type { PicnicTable } from "../types";
 import { isPlaced, tableGround, tableRadius } from "./deck-world";
 
 // The ground under the tables without Google, fetched live in the visitor's
-// browser (every service here sends CORS headers):
+// browser (every service here sends CORS headers), the way Mapbox's own 3D
+// maps are made: a terrain surface, with satellite imagery draped over it at
+// whatever zoom the view needs.
 //
+// The surface, in two parts:
 // - around the tables, about 1.2 × 0.86 km (all of Hellman Hollow, both
 //   roads and the woods either side): USGS 3DEP lidar heights (bare earth, a
-//   sample every 1.5 m) from The National Map, built into one mesh, under
-//   Mapbox satellite imagery stitched from its tiles: zoom 18 (about 0.24 m a
-//   pixel) where the GPU takes a texture that large, else zoom 17;
+//   sample every 1.5 m) from The National Map, built into one mesh;
 // - everywhere else: Terrain Tiles on AWS (Terrarium-encoded heights from
-//   USGS 3DEP) under Mapbox satellite tiles, streamed. The heights stop at
-//   zoom 15, and the imagery with them, so this part is soft up close.
-//
-// Without a Mapbox token (VITE_MAPBOX_TOKEN) the imagery is USGS's instead:
-// a NAIP aerial photo near the tables, the orthoimagery tiles around them.
+//   USGS 3DEP), streamed. These stop at zoom 15, which is plenty for shape.
+// The imagery: Mapbox satellite tiles, up to zoom 19 (about 0.12 m a pixel),
+// draped over both (deck.gl's TerrainExtension). Only the tiles in view load.
+// Without a Mapbox token (VITE_MAPBOX_TOKEN), USGS's orthoimagery tiles
+// instead, which stop at zoom 16.
 
 export const TERRAIN_ID = "ground-terrain";
 const SURROUND_ID = "ground-surround";
+const IMAGERY_ID = "ground-imagery";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN?.trim() || null;
-const MAPBOX_SATELLITE = "https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90";
-/** Mapbox zoom for the imagery near the tables (512 px tiles), at most: one
- *  less where the stitched picture would be larger than the GPU's textures. */
-const NEAR_ZOOM = 18;
+const IMAGERY = MAPBOX_TOKEN
+  ? {
+      url: `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=${encodeURIComponent(MAPBOX_TOKEN)}`,
+      tileSize: 512,
+      maxZoom: 19,
+    }
+  : {
+      url: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+      tileSize: 256,
+      maxZoom: 16,
+    };
 
 export const GROUND_CREDIT = MAPBOX_TOKEN
   ? "Elevation: USGS 3DEP lidar, Terrain Tiles on AWS · Imagery © Mapbox © Maxar"
-  : "Elevation: USGS 3DEP lidar, Terrain Tiles on AWS · Imagery: USDA NAIP via USGS The National Map";
+  : "Elevation: USGS 3DEP lidar, Terrain Tiles on AWS · Imagery: USGS The National Map";
 
 const DEM_URL = "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage";
-const PHOTO_URL = "https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPPlus/ImageServer/exportImage";
 const SURROUND_HEIGHTS = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-const SURROUND_IMAGERY = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
 
 /** Ground around the tables, in meters each side of their extent. */
 const PAD_EW = 500;
 const PAD_NS = 400;
-/** Meters per height sample, and per pixel of the USGS photo (the fallback imagery). */
+/** Meters per height sample. */
 const DEM_STEP = 1.5;
-const PHOTO_STEP = 0.5;
 /** Ellipsoid minus sea-level height in western San Francisco, used if the
  *  lidar cannot be had to measure it at the pads (it measures -32.94 there). */
 const FALLBACK_OFFSET = -32.9;
@@ -52,6 +60,10 @@ const EDGE_RING = 50;
 
 const M_PER_LAT = 111_320;
 const D2R = Math.PI / 180;
+/** The ground's own color, seen only where its imagery has not arrived yet: a
+ *  shadowed park green rather than white. */
+const UNDER = [38, 44, 36] as [number, number, number];
+/** The imagery carries its own light, as the tiles and scans do: show it as it is. */
 const UNLIT = { ambient: 1, diffuse: 0, shininess: 0, specularColor: [0, 0, 0] as [number, number, number] };
 
 interface Bounds {
@@ -82,95 +94,30 @@ async function fetchRetrying(url: string, tries = 4): Promise<Response> {
   return res;
 }
 
-function exportUrl(base: string, b: Bounds, width: number, height: number, extra: Record<string, string>) {
+/** Lidar heights above sea level, row by row from the north-west corner. */
+async function fetchHeights(b: Bounds, cols: number, rows: number) {
   const q = new URLSearchParams({
     bbox: [b.west, b.south, b.east, b.north].join(","),
     bboxSR: "4326",
     imageSR: "4326",
-    size: `${width},${height}`,
+    size: `${cols},${rows}`,
     f: "image",
-    ...extra,
-  });
-  return `${base}?${q}`;
-}
-
-/** Lidar heights above sea level, row by row from the north-west corner. */
-async function fetchHeights(b: Bounds, cols: number, rows: number) {
-  const url = exportUrl(DEM_URL, b, cols, rows, {
     format: "tiff",
     pixelType: "F32",
     compression: "LZ77",
     interpolation: "RSP_BilinearInterpolation",
   });
-  const [res, { fromArrayBuffer }] = await Promise.all([fetchRetrying(url), import("geotiff")]);
+  const [res, { fromArrayBuffer }] = await Promise.all([fetchRetrying(`${DEM_URL}?${q}`), import("geotiff")]);
   const image = await (await fromArrayBuffer(await res.arrayBuffer())).getImage();
   if (image.getWidth() !== cols || image.getHeight() !== rows) throw new Error("The lidar came back at another size");
   const [heights] = (await image.readRasters()) as unknown as Float32Array[];
   return heights;
 }
 
-/** The imagery over the lidar ground, covering exactly `b`, north up. */
-async function fetchPhoto(b: Bounds, width: number, height: number) {
-  if (MAPBOX_TOKEN) return mapboxPhoto(b, MAPBOX_TOKEN);
-  const url = exportUrl(PHOTO_URL, b, width, height, { format: "jpg", bandIds: "0,1,2" });
-  return createImageBitmap(await (await fetchRetrying(url)).blob());
-}
-
-/** The largest texture this GPU takes (4096 if it cannot be asked). */
-function maxTextureSize() {
-  try {
-    const gl = document.createElement("canvas").getContext("webgl2");
-    const size = gl ? (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) : 4096;
-    gl?.getExtension("WEBGL_lose_context")?.loseContext();
-    return size;
-  } catch {
-    return 4096;
-  }
-}
-
-/** Mapbox satellite tiles, stitched and cut to `b`: at NEAR_ZOOM, or lower
- *  until the picture fits in a texture. (The tiles are Web Mercator; across
- *  a kilometer that is linear in latitude to within centimeters, as the
- *  mesh's texture coordinates assume.) */
-async function mapboxPhoto(b: Bounds, token: string) {
-  const TILE = 512;
-  const limit = maxTextureSize();
-  const merc = (z: number) => {
-    const n = 2 ** z;
-    const tileY = (lat: number) => {
-      const s = Math.sin(lat * D2R);
-      return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
-    };
-    return { z, x0: ((b.west + 180) / 360) * n, x1: ((b.east + 180) / 360) * n, y0: tileY(b.north), y1: tileY(b.south) };
-  };
-  let m = merc(NEAR_ZOOM);
-  while (m.z > 15 && Math.max(m.x1 - m.x0, m.y1 - m.y0) * TILE > limit) m = merc(m.z - 1);
-  const { z, x0, x1, y0, y1 } = m;
-  const canvas = new OffscreenCanvas(Math.round((x1 - x0) * TILE), Math.round((y1 - y0) * TILE));
-  const ctx = canvas.getContext("2d")!;
-  const jobs: Promise<void>[] = [];
-  for (let x = Math.floor(x0); x < x1; x++) {
-    for (let y = Math.floor(y0); y < y1; y++) {
-      const url = MAPBOX_SATELLITE.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
-      jobs.push(
-        fetchRetrying(`${url}?access_token=${encodeURIComponent(token)}`)
-          .then((res) => res.blob())
-          .then((blob) => createImageBitmap(blob))
-          .then((tile) => {
-            // Whole pixels: neighbors then meet exactly, with no anti-aliased seam between them.
-            ctx.drawImage(tile, Math.round((x - x0) * TILE), Math.round((y - y0) * TILE), TILE, TILE);
-            tile.close();
-          }),
-      );
-    }
-  }
-  await Promise.all(jobs);
-  return canvas.transferToImageBitmap();
-}
-
 /**
- * The ground's layers: the streamed surroundings and, unless the image
- * services cannot be reached, the lidar ground near the tables over them.
+ * The ground's layers: the streamed surface, the lidar surface near the
+ * tables (unless the elevation service cannot be reached), and the imagery
+ * draped over both.
  */
 export async function loadGround(tables: PicnicTable[]): Promise<Layer[]> {
   const placed = tables.filter(isPlaced);
@@ -185,20 +132,15 @@ export async function loadGround(tables: PicnicTable[]): Promise<Layer[]> {
     south: Math.min(...lats) - PAD_NS / M_PER_LAT,
     north: Math.max(...lats) + PAD_NS / M_PER_LAT,
   };
-  const widthM = (b.east - b.west) * mPerLon;
-  const heightM = (b.north - b.south) * M_PER_LAT;
-  const cols = Math.round(widthM / DEM_STEP);
-  const rows = Math.round(heightM / DEM_STEP);
+  const cols = Math.round(((b.east - b.west) * mPerLon) / DEM_STEP);
+  const rows = Math.round(((b.north - b.south) * M_PER_LAT) / DEM_STEP);
 
   let near: Layer | null = null;
   let offset = FALLBACK_OFFSET;
   try {
-    const [heights, photo] = await Promise.all([
-      fetchHeights(b, cols, rows),
-      fetchPhoto(b, Math.round(widthM / PHOTO_STEP), Math.round(heightM / PHOTO_STEP)),
-    ]);
+    const heights = await fetchHeights(b, cols, rows);
     offset = padOffset(heights, b, cols, rows, placed);
-    near = nearGround(heights, photo, b, cols, rows, lon0, lat0, mPerLon, offset, placed);
+    near = nearGround(heights, b, cols, rows, lon0, lat0, mPerLon, offset, placed);
   } catch (e) {
     console.error("The lidar ground could not be loaded; showing the streamed ground only.", e);
   }
@@ -206,14 +148,31 @@ export async function loadGround(tables: PicnicTable[]): Promise<Layer[]> {
   const sink = near ? SURROUND_SINK : 0;
   const surround = new TerrainLayer({
     id: SURROUND_ID,
+    // A surface for the imagery to drape over, drawn with it.
+    operation: "terrain+draw",
     elevationData: SURROUND_HEIGHTS,
-    texture: MAPBOX_TOKEN ? `${MAPBOX_SATELLITE}?access_token=${encodeURIComponent(MAPBOX_TOKEN)}` : SURROUND_IMAGERY,
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 + offset - sink },
     maxZoom: 15,
     meshMaxError: 1,
+    color: UNDER,
     material: UNLIT,
   });
-  return near ? [surround, near] : [surround];
+  const imagery = new TileLayer<ImageBitmap>({
+    id: IMAGERY_ID,
+    data: IMAGERY.url,
+    tileSize: IMAGERY.tileSize,
+    minZoom: 0,
+    maxZoom: IMAGERY.maxZoom,
+    // Pick tiles for the heights the ground is at, not sea level, so a view at
+    // an angle is not left without tiles at its edges.
+    zRange: [-40, 80],
+    extensions: [new TerrainExtension()],
+    renderSubLayers: (props) => {
+      const [[west, south], [east, north]] = props.tile.boundingBox;
+      return new BitmapLayer({ ...props, data: undefined, image: props.data, bounds: [west, south, east, north] });
+    },
+  });
+  return near ? [surround, near, imagery] : [surround, imagery];
 }
 
 /**
@@ -238,10 +197,9 @@ function padOffset(heights: Float32Array, b: Bounds, cols: number, rows: number,
   return diffs.length ? diffs[Math.floor(diffs.length / 2)] : FALLBACK_OFFSET;
 }
 
-/** One mesh, a vertex per sample, in meters around (lon0, lat0), the photo laid over it. */
+/** One mesh, a vertex per sample, in meters around (lon0, lat0): a surface for the imagery. */
 function nearGround(
   heights: Float32Array,
-  photo: ImageBitmap,
   b: Bounds,
   cols: number,
   rows: number,
@@ -251,8 +209,6 @@ function nearGround(
   offset: number,
   tables: PicnicTable[],
 ) {
-  const dx = ((b.east - b.west) / cols) * mPerLon;
-  const dy = ((b.north - b.south) / rows) * M_PER_LAT;
   const height = (c: number, r: number) =>
     heights[Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))] + offset;
 
@@ -287,10 +243,7 @@ function nearGround(
     return z - SURROUND_SINK * k * k * (3 - 2 * k);
   };
 
-  const n = cols * rows;
-  const positions = new Float32Array(n * 3);
-  const normals = new Float32Array(n * 3);
-  const texCoords = new Float32Array(n * 2);
+  const positions = new Float32Array(cols * rows * 3);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
@@ -300,14 +253,6 @@ function nearGround(
       positions[i * 3] = x;
       positions[i * 3 + 1] = y;
       positions[i * 3 + 2] = edge(x, y, settle(x, y, height(c, r)));
-      const gx = (height(c + 1, r) - height(c - 1, r)) / (2 * dx);
-      const gy = (height(c, r - 1) - height(c, r + 1)) / (2 * dy);
-      const len = Math.hypot(gx, gy, 1);
-      normals[i * 3] = -gx / len;
-      normals[i * 3 + 1] = -gy / len;
-      normals[i * 3 + 2] = 1 / len;
-      texCoords[i * 2] = (c + 0.5) / cols;
-      texCoords[i * 2 + 1] = (r + 0.5) / rows;
     }
   }
   const indices = new Uint32Array((cols - 1) * (rows - 1) * 6);
@@ -322,21 +267,20 @@ function nearGround(
 
   return new SimpleMeshLayer({
     id: TERRAIN_ID,
+    // A surface for the imagery to drape over, drawn with it.
+    operation: "terrain+draw",
     data: [0],
     mesh: {
-      attributes: {
-        positions: { value: positions, size: 3 },
-        normals: { value: normals, size: 3 },
-        texCoords: { value: texCoords, size: 2 },
-      },
+      attributes: { positions: { value: positions, size: 3 } },
       indices: { value: indices, size: 1 },
     },
-    texture: photo,
+    // The mesh is already where it goes (meters around the origin), so its
+    // bounds are its own: the drape covers exactly the part in view.
+    _instanced: false,
     coordinateSystem: COORDINATE_SYSTEM.METER_OFFSETS,
     coordinateOrigin: [lon0, lat0, 0],
     getPosition: () => [0, 0, 0],
-    getColor: [255, 255, 255],
-    // The photo carries its own light, as the tiles and scans do: show it as it is.
+    getColor: UNDER,
     material: UNLIT,
   });
 }

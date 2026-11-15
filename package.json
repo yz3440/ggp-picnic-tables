@@ -19,6 +19,7 @@
     "stickers": "tsx small-batch-dataset/stickers/build.ts"
   },
   "dependencies": {
+    "@deck.gl/extensions": "^9.4.1",
     "@hono/node-server": "^2.1.8",
     "@loaders.gl/core": "^4.3.4",
     "@loaders.gl/gltf": "^4.3.4",
