@@ -5,9 +5,11 @@ import { isPlaced, tableGround, tableRadius } from "./deck-world";
 // The ground under the tables without Google, fetched live in the visitor's
 // browser (every service here sends CORS headers):
 //
-// - near the tables, about 690 × 420 m: USGS 3DEP lidar heights (bare earth,
-//   1 m) from The National Map, built into one mesh, under Mapbox satellite
-//   imagery at zoom 18 (about 0.24 m a pixel), stitched from its tiles;
+// - around the tables, about 1.2 × 0.86 km (all of Hellman Hollow, both
+//   roads and the woods either side): USGS 3DEP lidar heights (bare earth, a
+//   sample every 1.5 m) from The National Map, built into one mesh, under
+//   Mapbox satellite imagery stitched from its tiles: zoom 18 (about 0.24 m a
+//   pixel) where the GPU takes a texture that large, else zoom 17;
 // - everywhere else: Terrain Tiles on AWS (Terrarium-encoded heights from
 //   USGS 3DEP) under Mapbox satellite tiles, streamed. The heights stop at
 //   zoom 15, and the imagery with them, so this part is soft up close.
@@ -20,7 +22,8 @@ const SURROUND_ID = "ground-surround";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN?.trim() || null;
 const MAPBOX_SATELLITE = "https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90";
-/** Mapbox zoom for the imagery near the tables (512 px tiles). */
+/** Mapbox zoom for the imagery near the tables (512 px tiles), at most: one
+ *  less where the stitched picture would be larger than the GPU's textures. */
 const NEAR_ZOOM = 18;
 
 export const GROUND_CREDIT = MAPBOX_TOKEN
@@ -33,11 +36,11 @@ const SURROUND_HEIGHTS = "https://s3.amazonaws.com/elevation-tiles-prod/terrariu
 const SURROUND_IMAGERY = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}";
 
 /** Ground around the tables, in meters each side of their extent. */
-const PAD_EW = 260;
-const PAD_NS = 180;
-/** Meters per height sample and per photo pixel. */
-const DEM_STEP = 1;
-const PHOTO_STEP = 0.3;
+const PAD_EW = 500;
+const PAD_NS = 400;
+/** Meters per height sample, and per pixel of the USGS photo (the fallback imagery). */
+const DEM_STEP = 1.5;
+const PHOTO_STEP = 0.5;
 /** Ellipsoid minus sea-level height in western San Francisco, used if the
  *  lidar cannot be had to measure it at the pads (it measures -32.94 there). */
 const FALLBACK_OFFSET = -32.9;
@@ -113,33 +116,49 @@ async function fetchPhoto(b: Bounds, width: number, height: number) {
   return createImageBitmap(await (await fetchRetrying(url)).blob());
 }
 
-/** Mapbox satellite tiles at NEAR_ZOOM, stitched and cut to `b`. (The tiles
- *  are Web Mercator; across these few hundred meters that is linear in
- *  latitude to within centimeters, as the mesh's texture coordinates assume.) */
+/** The largest texture this GPU takes (4096 if it cannot be asked). */
+function maxTextureSize() {
+  try {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    const size = gl ? (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) : 4096;
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    return size;
+  } catch {
+    return 4096;
+  }
+}
+
+/** Mapbox satellite tiles, stitched and cut to `b`: at NEAR_ZOOM, or lower
+ *  until the picture fits in a texture. (The tiles are Web Mercator; across
+ *  a kilometer that is linear in latitude to within centimeters, as the
+ *  mesh's texture coordinates assume.) */
 async function mapboxPhoto(b: Bounds, token: string) {
   const TILE = 512;
-  const n = 2 ** NEAR_ZOOM;
-  const tileX = (lon: number) => ((lon + 180) / 360) * n;
-  const tileY = (lat: number) => {
-    const s = Math.sin(lat * D2R);
-    return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+  const limit = maxTextureSize();
+  const merc = (z: number) => {
+    const n = 2 ** z;
+    const tileY = (lat: number) => {
+      const s = Math.sin(lat * D2R);
+      return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+    };
+    return { z, x0: ((b.west + 180) / 360) * n, x1: ((b.east + 180) / 360) * n, y0: tileY(b.north), y1: tileY(b.south) };
   };
-  const x0 = tileX(b.west);
-  const x1 = tileX(b.east);
-  const y0 = tileY(b.north);
-  const y1 = tileY(b.south);
+  let m = merc(NEAR_ZOOM);
+  while (m.z > 15 && Math.max(m.x1 - m.x0, m.y1 - m.y0) * TILE > limit) m = merc(m.z - 1);
+  const { z, x0, x1, y0, y1 } = m;
   const canvas = new OffscreenCanvas(Math.round((x1 - x0) * TILE), Math.round((y1 - y0) * TILE));
   const ctx = canvas.getContext("2d")!;
   const jobs: Promise<void>[] = [];
   for (let x = Math.floor(x0); x < x1; x++) {
     for (let y = Math.floor(y0); y < y1; y++) {
-      const url = MAPBOX_SATELLITE.replace("{z}", String(NEAR_ZOOM)).replace("{x}", String(x)).replace("{y}", String(y));
+      const url = MAPBOX_SATELLITE.replace("{z}", String(z)).replace("{x}", String(x)).replace("{y}", String(y));
       jobs.push(
         fetchRetrying(`${url}?access_token=${encodeURIComponent(token)}`)
           .then((res) => res.blob())
           .then((blob) => createImageBitmap(blob))
           .then((tile) => {
-            ctx.drawImage(tile, (x - x0) * TILE, (y - y0) * TILE, TILE, TILE);
+            // Whole pixels: neighbors then meet exactly, with no anti-aliased seam between them.
+            ctx.drawImage(tile, Math.round((x - x0) * TILE), Math.round((y - y0) * TILE), TILE, TILE);
             tile.close();
           }),
       );
