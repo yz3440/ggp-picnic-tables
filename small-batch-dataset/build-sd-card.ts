@@ -1,11 +1,11 @@
 // Builds the SD card contents from model/: the scans and a README.txt with their placements.
-// Usage: bun run small-batch-dataset/build-sd-card.ts
+// Usage: npm run sd-card
 
 import { join } from 'path';
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { MODEL_DIR, readTables } from '../scripts/tables';
 
-const OUT = join(import.meta.dir, 'sd-card');
+const OUT = join(import.meta.dirname, 'sd-card');
 
 /** Ellipsoid height (m) of the meadow. Must match GROUND in website/src/scene/deck-world.ts. */
 const GROUND = 16.5;

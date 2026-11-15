@@ -1,6 +1,6 @@
 // SD card stickers: Cricut Print Then Cut sheets (print image + cut file) and a preview.
-// Usage: bun run small-batch-dataset/stickers/build.ts
-//        bun run small-batch-dataset/stickers/build.ts --web   (only the site's label, website/src/assets/sd-sticker.webp)
+// Usage: npm run stickers
+//        npm run stickers -- --web   (only the site's label, website/src/assets/sd-sticker.webp)
 
 import puppeteer, { type Browser } from 'puppeteer';
 import { join } from 'path';
@@ -9,8 +9,8 @@ import { execFileSync } from 'child_process';
 import { readTables } from '../../scripts/tables';
 import type { PicnicTable } from '../../website/src/types';
 
-const ROOT = join(import.meta.dir, '..', '..');
-const HERE = import.meta.dir;
+const ROOT = join(import.meta.dirname, '..', '..');
+const HERE = import.meta.dirname;
 const OUT = join(HERE, 'out');
 const ASSETS = join(OUT, 'assets');
 

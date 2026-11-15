@@ -2,7 +2,7 @@
 
 20 × 25 mm SD card labels, for Cricut Print Then Cut on Letter.
 
-`bun run small-batch-dataset/stickers/build.ts --web` only writes the label the
+`npm run stickers -- --web` only writes the label the
 site's About page puts on its turning SD card (`website/src/assets/sd-sticker.webp`).
 The full build writes it too.
 

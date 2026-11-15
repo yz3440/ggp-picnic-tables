@@ -4,12 +4,12 @@
 //   before the whole file has arrived;
 // - renders/<name>.jpg (4096 px, ~2.4 MB) → renders/preview/<name>.jpg (640 px).
 // The open viewer still uses the full-size picture.
-// Run after render-orbits: bun run scripts/make-previews.ts
+// Run after render-orbits: npm run make-previews
 import { execFileSync } from "child_process";
 import { mkdirSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 
-const RENDERS_DIR = join(import.meta.dir, "..", "renders");
+const RENDERS_DIR = join(import.meta.dirname, "..", "renders");
 const PREVIEW_DIR = join(RENDERS_DIR, "preview");
 const VIDEO_SIZE = 480;
 const IMAGE_SIZE = 640;

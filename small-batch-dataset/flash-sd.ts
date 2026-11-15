@@ -1,11 +1,12 @@
 // Erases an SD card to FAT32 and copies sd-card/ onto it. macOS only.
-// Usage: bun run small-batch-dataset/flash-sd.ts
+// Usage: npm run flash-sd
 // Keys: up/down select, r refresh, enter flash, q quit.
 
+import { spawnSync } from 'child_process';
 import { join } from 'path';
 import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
 
-const SRC = join(import.meta.dir, 'sd-card');
+const SRC = join(import.meta.dirname, 'sd-card');
 /** FAT32 volume label: uppercase, at most 11 characters. */
 const LABEL = 'GGP_TABLES';
 /** Never offer disks larger than this, so an external drive can't be picked by mistake. */
@@ -20,15 +21,15 @@ interface Disk {
 }
 
 const run = (cmd: string[]) => {
-  const p = Bun.spawnSync(cmd, { stdout: 'pipe', stderr: 'pipe' });
-  return { ok: p.exitCode === 0, out: p.stdout.toString(), err: p.stderr.toString() };
+  const p = spawnSync(cmd[0], cmd.slice(1), { encoding: 'utf8' });
+  return { ok: p.status === 0, out: p.stdout ?? '', err: p.stderr ?? '' };
 };
 
 const plist = (cmd: string[]): any => {
   const r = run(cmd);
   if (!r.ok) return null;
-  const j = Bun.spawnSync(['plutil', '-convert', 'json', '-o', '-', '-'], { stdin: Buffer.from(r.out) });
-  return JSON.parse(j.stdout.toString());
+  const j = spawnSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: r.out, encoding: 'utf8' });
+  return JSON.parse(j.stdout);
 };
 
 function listDisks(): Disk[] {
@@ -73,8 +74,8 @@ async function flash(disk: Disk, log: (s: string) => void): Promise<void> {
   for (const [i, f] of files.entries()) {
     log(`Copying ${i + 1}/${files.length} ${f}`);
     // -X: no extended attributes, so no ._ files on FAT32.
-    const cp = Bun.spawnSync(['cp', '-X', join(SRC, f), join(mount, f)], { stderr: 'pipe' });
-    if (cp.exitCode !== 0) throw new Error(cp.stderr.toString());
+    const cp = spawnSync('cp', ['-X', join(SRC, f), join(mount, f)], { encoding: 'utf8' });
+    if (cp.status !== 0) throw new Error(cp.stderr);
   }
   run(['sync']);
 
@@ -91,7 +92,7 @@ async function flash(disk: Disk, log: (s: string) => void): Promise<void> {
 // ---- UI ----
 
 if (!existsSync(SRC) || !srcFiles().some((f) => f.endsWith('.glb'))) {
-  console.error('sd-card/ has no models. Run: bun run small-batch-dataset/build-sd-card.ts');
+  console.error('sd-card/ has no models. Run: npm run sd-card');
   process.exit(1);
 }
 

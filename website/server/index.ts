@@ -1,28 +1,47 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { serve } from "@hono/node-server";
+import { createReadStream, statSync } from "fs";
 import { join } from "path";
+import { Readable } from "stream";
 import { readTables, updateTable } from "../../scripts/tables";
 
 // model/ and renders/ sit at the repository root, beside website/.
-const PROJECT_ROOT = join(import.meta.dir, "..", "..");
+const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
 const app = new Hono();
+
+/** A file under model/ or renders/: its path and size, or null if there is none. */
+function find(dir: string, filename: string) {
+  if (filename.includes("..")) return null;
+  const path = join(PROJECT_ROOT, dir, filename);
+  try {
+    const s = statSync(path);
+    return s.isFile() ? { path, size: s.size } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The file (or the bytes start to end, inclusive) as a web stream. */
+const stream = (path: string, start?: number, end?: number) =>
+  Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream;
 
 app.use("/api/*", cors());
 
-app.get("/model/:filename{.+\\.glb$}", async (c) => {
+app.get("/model/:filename{.+\\.glb$}", (c) => {
   const filename = decodeURIComponent(c.req.param("filename"));
-  const file = Bun.file(join(PROJECT_ROOT, "model", filename));
-  if (!(await file.exists())) return c.json({ error: "Not found" }, 404);
+  const file = find("model", filename);
+  if (!file) return c.json({ error: "Not found" }, 404);
   c.header("Access-Control-Allow-Origin", "*");
   c.header("Content-Type", "model/gltf-binary");
   c.header("Content-Length", String(file.size));
-  return c.body(file.stream());
+  return c.body(stream(file.path));
 });
 
-app.get("/renders/:filename{.+\\.(mp4|jpg)$}", async (c) => {
+app.get("/renders/:filename{.+\\.(mp4|jpg)$}", (c) => {
   const filename = decodeURIComponent(c.req.param("filename"));
-  const file = Bun.file(join(PROJECT_ROOT, "renders", filename));
-  if (!(await file.exists())) return c.json({ error: "Not found" }, 404);
+  const file = find("renders", filename);
+  if (!file) return c.json({ error: "Not found" }, 404);
   const ext = filename.split(".").pop();
   c.header("Content-Type", ext === "mp4" ? "video/mp4" : "image/jpeg");
   c.header("Accept-Ranges", "bytes");
@@ -37,10 +56,10 @@ app.get("/renders/:filename{.+\\.(mp4|jpg)$}", async (c) => {
     }
     c.header("Content-Range", `bytes ${start}-${end}/${file.size}`);
     c.header("Content-Length", String(end - start + 1));
-    return c.body(file.slice(start, end + 1).stream(), 206);
+    return c.body(stream(file.path, start, end), 206);
   }
   c.header("Content-Length", String(file.size));
-  return c.body(file.stream());
+  return c.body(stream(file.path));
 });
 
 app.get("/api/tables", (c) => {
@@ -63,9 +82,4 @@ app.put("/api/tables/:id", async (c) => {
 });
 
 const port = Number(process.env.PORT) || 3001;
-console.log(`Server running on http://localhost:${port}`);
-
-export default {
-  port,
-  fetch: app.fetch,
-};
+serve({ fetch: app.fetch, port }, () => console.log(`Server running on http://localhost:${port}`));

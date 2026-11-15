@@ -1,14 +1,16 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { type Page } from 'puppeteer';
 import { join } from 'path';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { createServer } from 'http';
+import type { AddressInfo } from 'net';
 import { execSync, execFileSync } from 'child_process';
 import { readTables } from './tables';
 import type { PicnicTable } from '../website/src/types';
 
-const PROJECT_ROOT = join(import.meta.dir, '..');
+const PROJECT_ROOT = join(import.meta.dirname, '..');
 const RENDERS_DIR = join(PROJECT_ROOT, 'renders');
 const TMP_DIR = join(PROJECT_ROOT, '.render-tmp');
-const RENDERER_PATH = join(import.meta.dir, 'orbit-renderer.html');
+const RENDERER_PATH = join(import.meta.dirname, 'orbit-renderer.html');
 
 const FRAME_COUNT = 120;
 const FPS = 30;
@@ -50,7 +52,7 @@ function encodeFramesToMp4(framesDir: string, outputPath: string) {
 }
 
 async function renderModel(
-  page: puppeteer.Page,
+  page: Page,
   table: PicnicTable,
   serverPort: number,
 ) {
@@ -112,28 +114,24 @@ async function main() {
   mkdirSync(TMP_DIR, { recursive: true });
 
   // Start a minimal static server for GLB files
-  const server = Bun.serve({
-    port: 0,
-    async fetch(req) {
-      const url = new URL(req.url);
-      if (url.pathname.startsWith('/model/')) {
-        const filename = decodeURIComponent(
-          url.pathname.replace('/model/', ''),
-        );
-        const file = Bun.file(join(PROJECT_ROOT, 'model', filename));
-        if (!(await file.exists()))
-          return new Response('Not found', { status: 404 });
-        return new Response(file.stream(), {
-          headers: {
-            'Content-Type': 'model/gltf-binary',
-            'Access-Control-Allow-Origin': '*',
-          },
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname.startsWith('/model/')) {
+      const filename = decodeURIComponent(url.pathname.replace('/model/', ''));
+      const path = join(PROJECT_ROOT, 'model', filename);
+      if (!filename.includes('..') && existsSync(path)) {
+        res.writeHead(200, {
+          'Content-Type': 'model/gltf-binary',
+          'Access-Control-Allow-Origin': '*',
         });
+        createReadStream(path).pipe(res);
+        return;
       }
-      return new Response('Not found', { status: 404 });
-    },
+    }
+    res.writeHead(404).end('Not found');
   });
-  const serverPort = server.port;
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const serverPort = (server.address() as AddressInfo).port;
   console.log(`Static server on port ${serverPort}\n`);
 
   const browser = await puppeteer.launch({
@@ -160,7 +158,7 @@ async function main() {
   }
 
   await browser.close();
-  server.stop();
+  server.close();
 
   rmSync(TMP_DIR, { recursive: true, force: true });
   console.log('\nAll renders complete!');
