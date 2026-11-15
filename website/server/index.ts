@@ -62,17 +62,6 @@ app.get("/renders/:filename{.+\\.(mp4|jpg)$}", (c) => {
   return c.body(stream(file.path));
 });
 
-// The baked ground (scripts/build-ground.ts).
-const GROUND_TYPES: Record<string, string> = { json: "application/json", bin: "application/octet-stream", jpg: "image/jpeg" };
-app.get("/model/ground/:filename{ground\\.(json|bin|jpg)$}", (c) => {
-  const filename = c.req.param("filename");
-  const file = find("model/ground", filename);
-  if (!file) return c.json({ error: "Not found" }, 404);
-  c.header("Content-Type", GROUND_TYPES[filename.split(".").pop()!]);
-  c.header("Content-Length", String(file.size));
-  return c.body(stream(file.path));
-});
-
 app.get("/api/tables", (c) => {
   return c.json(readTables());
 });

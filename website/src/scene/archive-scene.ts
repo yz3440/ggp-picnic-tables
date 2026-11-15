@@ -6,8 +6,6 @@ import {
   GROUND,
   GROUND_MAP_ID,
   basemapLayer,
-  loadTerrain,
-  TERRAIN_ID,
   createMapSession,
   flatLight,
   hexToRgba,
@@ -30,13 +28,14 @@ import {
 } from "./deck-world";
 import { layoutCallouts } from "./tags";
 import { CarveExtension, carveBoxes, carveFloorLayer } from "./carve";
+import { GROUND_CREDIT, loadGround, TERRAIN_ID } from "./ground";
 import { ParkLightExtension } from "./park-light";
 import { glowLayer, glowSize, glowStrength } from "./glow";
 import { SeeThroughExtension, type SeeThrough } from "./see-through";
 
 export type ViewPreset = "orbit" | "top" | "side";
-/** What the open table stands on: the baked lidar ground with an aerial photo
- *  (no Google), Google's satellite imagery laid flat, or Google's 3D tiles. */
+/** What the open table stands on: the lidar ground with an aerial photo,
+ *  fetched live from USGS (no Google), Google's satellite imagery laid flat, or Google's 3D tiles. */
 export type Ground = "terrain" | "satellite" | "3d";
 type ViewId = "viewer" | "map";
 
@@ -130,9 +129,9 @@ export class ArchiveScene {
   private scans: Layer[] = [];
   private basemap: Layer | null = null;
   private groundMap: Layer | null = null;
-  /** The baked terrain by default; satellite and the 3D tiles are the alternatives. */
+  /** The lidar terrain by default; satellite and the 3D tiles are the alternatives. */
   private ground: Ground = "terrain";
-  /** The baked ground, once loaded (model/ground/, scripts/build-ground.ts). */
+  /** The ground's layers, once loaded (scene/ground.ts, fetched live). */
   private terrain: Layer[] = [];
   private terrainLoading: Promise<void> | null = null;
   /** The satellite session, once made: the viewer's imagery is requested with it. */
@@ -187,7 +186,7 @@ export class ArchiveScene {
   onPickTable: ((id: number) => void) | null = null;
   /** The open table's model has loaded. */
   onModelReady: ((id: number) => void) | null = null;
-  /** The baked ground's credits, once it has loaded. */
+  /** The ground's credits, once it has loaded. */
   onTerrainCredit: ((text: string) => void) | null = null;
   /** The loupe appeared or went away. */
   onLoupe: ((on: boolean) => void) | null = null;
@@ -220,8 +219,8 @@ export class ArchiveScene {
       views: [],
       viewState: this.deckViewState(),
       layers: [],
-      // The map shows only the roadmap; the loupe the scans, and the baked
-      // ground (one small mesh, unlike the streamed tiles); everything else is the viewer's.
+      // The map shows only the roadmap; the loupe the scans, and the lidar
+      // ground near them (one mesh, unlike the streamed tiles); everything else is the viewer's.
       layerFilter: ({ layer, viewport }) =>
         viewport.id === "loupe"
           ? tableIdOfLayer(layer.id) != null || layer.id === TERRAIN_ID
@@ -442,11 +441,11 @@ export class ArchiveScene {
   /** Load the baked ground the first time it is wanted. */
   private ensureTerrain() {
     if (this.ground !== "terrain" || this.terrainLoading) return;
-    this.terrainLoading = loadTerrain(this.tables)
-      .then(({ layers, credit }) => {
+    this.terrainLoading = loadGround(this.tables)
+      .then((layers) => {
         if (this.disposed) return;
         this.terrain = layers;
-        this.onTerrainCredit?.(credit);
+        this.onTerrainCredit?.(GROUND_CREDIT);
         this.updateLayers();
       })
       .catch((e) => {

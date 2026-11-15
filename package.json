@@ -16,8 +16,7 @@
     "make-previews": "tsx scripts/make-previews.ts",
     "sd-card": "tsx small-batch-dataset/build-sd-card.ts",
     "flash-sd": "tsx small-batch-dataset/flash-sd.ts",
-    "stickers": "tsx small-batch-dataset/stickers/build.ts",
-    "ground": "tsx scripts/build-ground.ts"
+    "stickers": "tsx small-batch-dataset/stickers/build.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",
@@ -31,6 +30,7 @@
     "@math.gl/geospatial": "^4.1.0",
     "@types/three": "^0.183.1",
     "deck.gl": "^9.2.9",
+    "geotiff": "^3.0.5",
     "hono": "^4.12.2",
     "mapbox-gl": "^3.18.1",
     "react": "^19.2.4",
@@ -46,7 +46,6 @@
     "@vitejs/plugin-react": "^5.1.4",
     "autoprefixer": "^10.4.24",
     "concurrently": "^9.2.1",
-    "geotiff": "^3.0.5",
     "postcss": "^8.5.6",
     "puppeteer": "^24.37.5",
     "tailwindcss": "^4.2.1",
