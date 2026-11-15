@@ -9,7 +9,7 @@ export default function SeasonTicker() {
   // Each run is wider than any screen, so sliding by one run never shows a gap.
   const run = `${items.join("  *  ")}  *  `.repeat(3);
   const label = now
-    ? `The SD card is at Small Batch: A Dataset Farmers Market, Fall Harvest Edition, Saturday November 15 at LARPA, Bushwick`
+    ? `The SD card is at Small Batch: A Dataset Farmers Market, Fall Harvest Edition, Sunday November 15 at LARPA, Bushwick`
     : `The SD card was made for Small Batch: A Dataset Farmers Market, Fall Harvest Edition, November 15, 2026 at LARPA, Bushwick`;
 
   return (

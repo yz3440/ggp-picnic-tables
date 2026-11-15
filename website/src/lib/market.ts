@@ -2,7 +2,7 @@
 export const MARKET = {
   name: "small batch: a dataset farmers market",
   edition: "fall harvest edition",
-  day: "sat nov 15",
+  day: "sun nov 15",
   date: "nov 15, 2026",
   place: "larpa, bushwick",
   url: "https://smallbatchdata.market/",
