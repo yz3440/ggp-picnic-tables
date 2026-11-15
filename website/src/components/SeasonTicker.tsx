@@ -4,8 +4,8 @@ import { inSeason, MARKET } from "../lib/market";
 export default function SeasonTicker() {
   const now = inSeason();
   const items = now
-    ? ["now in season", MARKET.name, MARKET.edition, MARKET.day, MARKET.place, "12 picnic tables on one sd card", "smallbatchdata.market"]
-    : [`picked for ${MARKET.name}`, MARKET.edition, MARKET.date, MARKET.place, "12 picnic tables on one sd card", "smallbatchdata.market"];
+    ? ["now in season", MARKET.name, MARKET.edition, MARKET.day, MARKET.place, "12 picnic tables on one sd card, an edition of 30", "smallbatchdata.market"]
+    : [`picked for ${MARKET.name}`, MARKET.edition, MARKET.date, MARKET.place, "12 picnic tables on one sd card, an edition of 30", "smallbatchdata.market"];
   // Each run is wider than any screen, so sliding by one run never shows a gap.
   const run = `${items.join("  *  ")}  *  `.repeat(3);
   const label = now

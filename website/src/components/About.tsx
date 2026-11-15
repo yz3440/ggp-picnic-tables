@@ -14,6 +14,7 @@ const CONTENTS = [
   ["readme.txt", "latitude, longitude, altitude, pitch, yaw, roll and scale for each table"],
   ["scanned", "february 13, 2026, hellman hollow"],
   ["label", "20 × 25 mm, the twelve tables tiled"],
+  ["edition", "30 cards"],
 ];
 
 const LINK = "underline decoration-control underline-offset-2 hover:decoration-foreground";
@@ -64,8 +65,8 @@ export default function About() {
         </div>
         <div className="flex min-w-0 flex-col gap-3 text-[13px] leading-5.25">
           <p>
-            all twelve scans on one sd card, labeled with a sticker tiled from the tables themselves. drag
-            the card to turn it.
+            all twelve scans on one sd card, labeled with a sticker tiled from the tables themselves. i made
+            30 of them for the market. drag the card to turn it.
           </p>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px] leading-4">
             {CONTENTS.map(([k, v]) => (
