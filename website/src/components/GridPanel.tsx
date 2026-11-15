@@ -77,13 +77,6 @@ export default function GridPanel({
           />
         ))}
       </div>
-
-      <footer className='flex border-t border-border px-4 py-3 text-xs text-muted-foreground'>
-        <span>yufeng zhao</span>
-        <span className='ml-auto tabular-nums'>
-          {tables.length} tables / 2026
-        </span>
-      </footer>
     </>
   );
 }

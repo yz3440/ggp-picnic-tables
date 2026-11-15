@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { inSeason, MARKET } from '../lib/market';
+import table from '../assets/coming-across.webp';
 import turrell from '../assets/turrell-three-gems.webp';
 import cards from '../assets/sd-cards.webp';
 import { MICRO } from './ui';
@@ -8,6 +9,7 @@ import { MICRO } from './ui';
 const SdCard = lazy(() => import('./SdCard'));
 
 const SHOW = 'https://www.tiat.place/exhibitions/computer-love';
+const SITE = 'https://www.yufengzhao.com/';
 
 /** What is on the card, as its readme.txt lists it. */
 const CONTENTS = [
@@ -30,41 +32,67 @@ export default function About() {
   return (
     <article className='mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-8 pb-16'>
       <h1 className='text-4xl font-bold tracking-tight'>about</h1>
+      <p className='text-[13px] leading-5.25'>
+        made by{' '}
+        <a href={SITE} target='_blank' rel='noreferrer' className={LINK}>
+          yufeng zhao
+        </a>
+      </p>
 
-      <div className='flex max-w-prose flex-col gap-3 text-[13px] leading-5.25'>
-        <p>
-          february 13, 2026. i was in town setting up{' '}
-          <a href={SHOW} target='_blank' rel='noreferrer' className={LINK}>
-            computer love
-          </a>{' '}
-          at tiat. that morning i walked into golden gate park, came across
-          these picnic tables in hellman hollow, and scanned every one i saw.
-        </p>
-        <p>
-          later, i matched each scan to its coordinates with google earth. i was
-          surprised that google earth showed more tables than i found in the
-          park. some of them just weren’t there when i visited, which is why you
-          see the jumps in table numbers in my scans.
-        </p>
-        <p>
-          after the scans, i walked over to the de young and saw the james
-          turrell.
-        </p>
+      {/* On a phone: the table photo, the story, then the Turrell. Wider: the
+          story, then the two photos side by side, the columns in the ratio of
+          their widths (4:3 and 3:4) so the photos stand the same height. */}
+      <div className='grid items-start gap-3 sm:grid-cols-[16fr_9fr] sm:gap-x-4'>
+        <figure className='flex flex-col gap-2 sm:col-start-1 sm:row-start-2'>
+          <img
+            src={table}
+            alt='Looking down at a green picnic table covered in graffiti and the stencil “tables subject to reservation”, a camera lying on it.'
+            width={1200}
+            height={900}
+            loading='lazy'
+            className='aspect-4/3 w-full bg-muted object-cover'
+          />
+          <figcaption className='text-[11px] text-muted-foreground'>
+            coming across one of the tables in hellman hollow. february 13,
+            2026, 1:30 pm.
+          </figcaption>
+        </figure>
+
+        <div className='flex max-w-prose flex-col gap-3 text-[13px] leading-5.25 sm:col-span-2 sm:row-start-1'>
+          <p>
+            february 13, 2026. i was in town setting up{' '}
+            <a href={SHOW} target='_blank' rel='noreferrer' className={LINK}>
+              computer love
+            </a>{' '}
+            at tiat. that morning i walked into golden gate park, came across
+            these picnic tables in hellman hollow, and scanned every one i saw.
+          </p>
+          <p>
+            later, i matched each scan to its coordinates with google earth. i
+            was surprised that google earth showed more tables than i found in
+            the park. some of them just weren’t there when i visited, which is
+            why you see the jumps in table numbers in my scans.
+          </p>
+          <p>
+            after the scans, i walked over to the de young and saw the james
+            turrell.
+          </p>
+        </div>
+
+        <figure className='flex flex-col gap-2 max-sm:max-w-sm sm:col-start-2 sm:row-start-2'>
+          <img
+            src={turrell}
+            alt='Looking up inside James Turrell’s Three Gems: a round opening in a pale dome, blue sky and a cloud.'
+            width={900}
+            height={1200}
+            loading='lazy'
+            className='aspect-3/4 w-full bg-muted object-cover'
+          />
+          <figcaption className='text-[11px] text-muted-foreground'>
+            james turrell, three gems, de young museum. february 13, 2026, 4 pm.
+          </figcaption>
+        </figure>
       </div>
-
-      <figure className='flex max-w-sm flex-col gap-2'>
-        <img
-          src={turrell}
-          alt='Looking up inside James Turrell’s Three Gems: a round opening in a pale dome, blue sky and a cloud.'
-          width={900}
-          height={1200}
-          loading='lazy'
-          className='aspect-3/4 w-full bg-muted object-cover'
-        />
-        <figcaption className='text-[11px] text-muted-foreground'>
-          james turrell, three gems, de young museum. february 13, 2026, 4 pm.
-        </figcaption>
-      </figure>
 
       <h2 className={`${MICRO} mt-4`}>sd card/</h2>
       <div className='flex max-w-3xl flex-col gap-4 sm:flex-row sm:items-start'>
@@ -112,7 +140,8 @@ export default function About() {
           className='aspect-4/3 w-full bg-muted object-cover'
         />
         <figcaption className='text-[11px] text-muted-foreground'>
-          the edition, labeled and out of their cases.
+          just put on all the stickers and burning the cards on the night of nov
+          7, 2026.
         </figcaption>
       </figure>
 
