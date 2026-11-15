@@ -7,6 +7,7 @@ import GridPanel, { type MobileView, type Order } from "./components/GridPanel";
 import About from "./components/About";
 import Stage from "./components/Stage";
 import SeasonTicker from "./components/SeasonTicker";
+import Grass from "./components/Grass";
 
 function readHash() {
   return window.location.hash.match(/^#table-(.+)$/)?.[1] ?? null;
@@ -103,7 +104,9 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    // No background of its own: the body's paper color, with the grass over it, shows through.
+    <div className="flex h-dvh flex-col overflow-hidden text-foreground">
+      <Grass />
       <GlobalBar section={section} onSection={chooseSection} />
       <SeasonTicker />
       {section === "about" && (

@@ -8,7 +8,7 @@ import { MICRO } from './ui';
 // three.js only loads when someone opens About.
 const SdCard = lazy(() => import('./SdCard'));
 
-const SHOW = 'https://www.tiat.place/exhibitions/computer-love';
+const SHOW = 'https://www.tiat.place/exhibitions/computer-love#artwork-17';
 const SITE = 'https://www.yufengzhao.com/';
 
 /** What is on the card, as its readme.txt lists it. */
